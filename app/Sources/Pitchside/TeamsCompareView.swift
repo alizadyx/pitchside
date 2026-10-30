@@ -49,6 +49,7 @@ struct TeamsCompareView: View {
 
 // MARK: - Shared bits
 
+@MainActor
 enum MetricText {
     static func format(_ m: TeamCompare.Metric, _ v: Double, store: Store) -> String {
         switch m.id {

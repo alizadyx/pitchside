@@ -800,8 +800,9 @@ final class Store {
                     out[keys[c]!] = p
                 }
             }
+            let result = out
             await MainActor.run {
-                self.profileCache.merge(out) { $1 }
+                self.profileCache.merge(result) { $1 }
                 self.compareJobs -= 1
                 self.updateLeagueProfiles()
             }

@@ -1,0 +1,2 @@
+463074f78ed86779cd5c72b5b3708fd1277ddbca Mon Sep 14 17:48:20 2026 +0200
+https://github.com/DadMych/fm26-player-export-macos

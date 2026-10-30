@@ -1,0 +1,6 @@
+.DS_Store
+app/.build/
+app/.swiftpm/
+app/*.app
+plugin/bin/
+plugin/obj/

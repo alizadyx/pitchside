@@ -290,16 +290,16 @@ public enum AttributeGroups {
     public static let staffKnowledge = ["JudgingAbility", "JudgingPotential", "JudgingStaff", "Negotiating", "TacticalKnowledge",
                                         "DataAnalysis", "Physiotherapy", "SportsScience"]
 
-    /// FM27 shows staff attributes as words; bands measured against the game.
+    /// FM27 shows staff attributes as words; bands checked against in-game staff profiles.
     public static func staffWord(_ v: Int) -> String {
         switch v {
         case ..<1: "–"
-        case 1...4: "Poor"
+        case 1...4: "Unsuited"
         case 5...6: "Reasonable"
         case 7...9: "Competent"
         case 10...11: "Average"
         case 12...14: "Good"
-        case 15...16: "Very Good"
+        case 15...17: "Very Good"
         default: "Outstanding"
         }
     }

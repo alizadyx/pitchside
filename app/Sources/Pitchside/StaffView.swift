@@ -135,7 +135,7 @@ struct StaffDetail: View {
 
     var body: some View {
         let p = row.person
-        let values = attributeValues(keys: store.meta?.staffAttrKeys ?? [], vals: p.s)
+        let values = staffValues(p)
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -170,6 +170,15 @@ struct StaffDetail: View {
                 }
             }
         }
+    }
+
+    /// Staff attributes, plus Adaptability, which FM shows from the person's personality.
+    private func staffValues(_ p: Person) -> [String: Int] {
+        var values = attributeValues(keys: store.meta?.staffAttrKeys ?? [], vals: p.s)
+        if let i = store.meta?.personalityKeys.firstIndex(of: "Adaptability"), let pv = p.p, i < pv.count, pv[i] > 0 {
+            values["Adaptability"] = Int(pv[i])
+        }
+        return values
     }
 
     private func attributeValues(keys: [String], vals: [UInt8]?) -> [String: Int] {

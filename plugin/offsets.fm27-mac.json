@@ -1,5 +1,5 @@
 {
-  "Version": "fm27-mac 2026-10-30: players, contracts, staff, gender (checked against in-game profiles)",
+  "Version": "fm27-mac 2026-10-30: players, contracts, staff (incl. Authority), gender, team age limits (checked against in-game profiles)",
   "Verified": true,
   "EngineImage": "game_plugin",
   "ObjUid": "0x11C",
@@ -157,10 +157,12 @@
       "TacticalKnowledge": "0x21",
       "Physiotherapy": "0x20",
       "SportsScience": "0x2F",
-      "DataAnalysis": "0x2C"
+      "DataAnalysis": "0x2C",
+      "Authority": "0x4"
     },
     "RawKeys": [
-      "WorkingWithYoungsters"
+      "WorkingWithYoungsters",
+      "Authority"
     ]
   },
   "Contract": {

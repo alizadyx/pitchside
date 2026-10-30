@@ -137,7 +137,6 @@ Patches can move data around in memory. If a scan finds very few players, or val
 - The in-game date is worked out from the most recent contract signing in the database, so it can be
   a day or two behind. It's shown in the status bar; the season can be set by hand in Settings.
 - Players out on loan still count towards their parent club's team.
-- Two staff attributes (Authority, Adaptability) aren't mapped yet.
 - Only the Steam version on Apple Silicon is supported. Intel Macs, Game Pass and Epic aren't.
 
 ## How it works

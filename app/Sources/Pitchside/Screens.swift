@@ -20,7 +20,7 @@ private struct ProfileInspector: ViewModifier {
     func body(content: Content) -> some View {
         content.inspector(isPresented: Binding(get: { selection != nil }, set: { if !$0 { selection = nil } })) {
             Group {
-                if let id = selection, let row = store.playerRow(id) { PlayerDetail(row: row) }
+                if let id = selection, let row = store.playerRow(id) { PlayerDetail(row: row) { selection = nil } }
                 else { Text("Select a player").foregroundStyle(.secondary) }
             }
             .inspectorColumnWidth(min: 360, ideal: 440, max: 720)
@@ -36,6 +36,8 @@ extension View {
 
 struct SquadView: View {
     @Environment(Store.self) private var store
+    /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
+    @SceneStorage("table.signings") private var columnLayout: TableColumnCustomization<SquadBuilder.Suggestion>
     @State private var clubQuery = ""
     @State private var picked: UInt32?
     @State private var showSave = false
@@ -264,7 +266,7 @@ struct SquadView: View {
                 ColumnsMenu(table: "signings")
             }
             .padding(10)
-            Table(store.suggestions, selection: $picked) {
+            Table(store.suggestions, selection: $picked, columnCustomization: $columnLayout) {
                 TableColumn("★") { s in
                     Button { store.toggleShortlist(s.row.id) } label: {
                         Image(systemName: store.shortlist.contains(s.row.id) ? "star.fill" : "star")
@@ -272,35 +274,35 @@ struct SquadView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .width(20)
-                TableColumn("Name") { s in Text(s.row.name).fontWeight(.medium).lineLimit(1) }.width(min: 130, ideal: 180)
-                TableColumn("Age") { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40)
+                .width(20).customizationID("star")
+                TableColumn("Name") { s in Text(s.row.name).fontWeight(.medium).lineLimit(1) }.width(min: 130, ideal: 180).customizationID("name")
+                TableColumn("Age") { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                 TableColumn("Club") { s in
                     Text(s.row.club.isEmpty ? "Free agent" : s.row.club).lineLimit(1).foregroundStyle(.secondary)
                 }
-                .width(min: 90, ideal: 140, max: 240)
+                .width(min: 90, ideal: 140, max: 240).customizationID("club")
                 TableColumn("Role") { s in
                     Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(AttrColor.color(Int(s.score.rounded())))
                 }
-                .width(min: 36, ideal: 42, max: 50)
+                .width(min: 36, ideal: 42, max: 50).customizationID("role")
                 TableColumn("Gain") { s in
                     Text(String(format: "+%.1f", s.gain)).monospacedDigit().fontWeight(.semibold).foregroundStyle(.green)
                 }
-                .width(min: 40, ideal: 46, max: 54)
-                TableColumn("CA/PA") { s in Text("\(s.row.ca)/\(s.row.pa)").monospacedDigit() }.width(min: 54, ideal: 60, max: 70)
+                .width(min: 40, ideal: 46, max: 54).customizationID("gain")
+                TableColumn("CA/PA") { s in Text("\(s.row.ca)/\(s.row.pa)").monospacedDigit() }.width(min: 54, ideal: 60, max: 70).customizationID("ca-pa")
                 TableColumn("Interest") { s in
                     InterestBadge(a: s.interest)
                 }
-                .width(min: 70, ideal: 92, max: 110)
+                .width(min: 70, ideal: 92, max: 110).customizationID("interest")
                 TableColumn("Value · Wage") { s in
                     Text(Money.format(s.row.person.val, symbol: store.currency.symbol, perGbp: store.rate) + " · "
                          + Money.format(s.row.person.wage, symbol: store.currency.symbol, perGbp: store.rate))
                         .monospacedDigit().lineLimit(1)
                 }
-                .width(min: 90, ideal: 120, max: 170)
+                .width(min: 90, ideal: 120, max: 170).customizationID("value-wage")
                 TableColumnForEach(store.columns(for: "signings")) { c in
                     TableColumn(c.shortTitle) { s in StatCell(column: c, row: s.row, store: store) }
-                        .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
+                        .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
                 }
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
@@ -318,6 +320,8 @@ struct SquadView: View {
 struct MySquadView: View {
     @Binding var picked: UInt32?
     @Environment(Store.self) private var store
+    /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
+    @SceneStorage("table.squad") private var columnLayout: TableColumnCustomization<PlayerRow>
 
     var body: some View {
         @Bindable var store = store
@@ -329,7 +333,7 @@ struct MySquadView: View {
                 ColumnsMenu(table: "squad")
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            Table(store.squadRows, selection: $picked, sortOrder: $store.squadSort) {
+            Table(store.squadRows, selection: $picked, sortOrder: $store.squadSort, columnCustomization: $columnLayout) {
                 TableColumn("★", value: \.shortlistKey) { r in
                     Button { store.toggleShortlist(r.id) } label: {
                         Image(systemName: store.shortlist.contains(r.id) ? "star.fill" : "star")
@@ -337,9 +341,9 @@ struct MySquadView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .width(20)
+                .width(20).customizationID("star")
                 TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
-                    .width(min: 130, ideal: 190)
+                    .width(min: 130, ideal: 190).customizationID("name")
                 TableColumn("XI", value: \PlayerRow[extra: "xi"]) { r in
                     let t = store.squadRoleText[r.id]
                     Text(t ?? "—").lineLimit(1)
@@ -347,13 +351,13 @@ struct MySquadView: View {
                         .foregroundStyle(t == nil ? Color.secondary.opacity(0.6)
                                          : (t ?? "").contains("backup") ? Color.secondary : Theme.accent)
                 }
-                .width(min: 50, ideal: 86, max: 120)
+                .width(min: 50, ideal: 86, max: 120).customizationID("xi")
                 TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }
-                    .width(min: 30, ideal: 34, max: 40)
+                    .width(min: 30, ideal: 34, max: 40).customizationID("age")
                 TableColumn("Position", value: \.positions) { r in
                     Text(r.positions).foregroundStyle(.secondary).lineLimit(1)
                 }
-                .width(min: 60, ideal: 110, max: 180)
+                .width(min: 60, ideal: 110, max: 180).customizationID("position")
                 TableColumn("Best role", value: \.bestRoleScore) { r in
                     HStack(spacing: 4) {
                         Text(r.bestRole).foregroundStyle(.secondary).frame(minWidth: 26, alignment: .leading)
@@ -361,16 +365,16 @@ struct MySquadView: View {
                             .foregroundStyle(AttrColor.color(Int(r.bestRoleScore.rounded())))
                     }
                 }
-                .width(min: 60, ideal: 80, max: 100)
-                TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44)
-                TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44)
+                .width(min: 60, ideal: 80, max: 100).customizationID("best-role")
+                TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
+                TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                 TableColumn("Contract", value: \.expires) { r in
                     Text(r.expires.isEmpty ? "—" : String(r.expires.prefix(7))).monospacedDigit().foregroundStyle(.secondary)
                 }
-                .width(min: 54, ideal: 64, max: 80)
+                .width(min: 54, ideal: 64, max: 80).customizationID("contract")
                 TableColumnForEach(store.columns(for: "squad")) { c in
                     TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r, store: store) }
-                        .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
+                        .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
                 }
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
@@ -554,6 +558,8 @@ struct SlotCard: View {
 
 struct RadarView: View {
     @Environment(Store.self) private var store
+    /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
+    @SceneStorage("table.growth") private var columnLayout: TableColumnCustomization<PlayerRow>
     @State private var mode = 0
     @State private var picked: UInt32?
 
@@ -599,7 +605,7 @@ struct RadarView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(rows, selection: $picked) {
+                Table(rows, selection: $picked, columnCustomization: $columnLayout) {
                     TableColumn("★") { r in
                         Button { store.toggleShortlist(r.id) } label: {
                             Image(systemName: store.shortlist.contains(r.id) ? "star.fill" : "star")
@@ -607,28 +613,28 @@ struct RadarView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .width(20)
-                    TableColumn("Name") { r in Text(r.name).fontWeight(.medium).lineLimit(1) }.width(min: 140, ideal: 190)
-                    TableColumn("Age") { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40)
+                    .width(20).customizationID("star")
+                    TableColumn("Name") { r in Text(r.name).fontWeight(.medium).lineLimit(1) }.width(min: 140, ideal: 190).customizationID("name")
+                    TableColumn("Age") { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                     TableColumn("Position") { r in Text(r.positions).foregroundStyle(.secondary).lineLimit(1) }
-                        .width(min: 60, ideal: 100, max: 160)
+                        .width(min: 60, ideal: 100, max: 160).customizationID("position")
                     TableColumn("Club") { r in Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1) }
-                        .width(min: 90, ideal: 150, max: 240)
-                    TableColumn("CA") { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44)
-                    TableColumn("PA") { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44)
+                        .width(min: 90, ideal: 150, max: 240).customizationID("club")
+                    TableColumn("CA") { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
+                    TableColumn("PA") { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                     TableColumn("Growth") { r in
                         Text(r.growth == PlayerRow.noGrowth ? "new" : (r.growth > 0 ? "+\(r.growth)" : "\(r.growth)"))
                             .monospacedDigit().fontWeight(.semibold)
                             .foregroundStyle(r.growth == PlayerRow.noGrowth ? Color.purple : r.growth > 0 ? Color.green : Color.secondary)
                     }
-                    .width(min: 40, ideal: 50, max: 60)
+                    .width(min: 40, ideal: 50, max: 60).customizationID("growth")
                     TableColumn("Meta") { r in
                         Text(String(format: "%.1f", r.meta)).monospacedDigit().foregroundStyle(AttrColor.color(Int(r.meta.rounded())))
                     }
-                    .width(min: 36, ideal: 42, max: 50)
+                    .width(min: 36, ideal: 42, max: 50).customizationID("meta")
                     TableColumnForEach(store.columns(for: "growth")) { c in
                         TableColumn(c.shortTitle) { r in StatCell(column: c, row: r, store: store) }
-                            .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
+                            .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
                     }
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: true))

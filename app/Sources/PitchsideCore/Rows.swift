@@ -157,7 +157,28 @@ public struct PlayerFilter: Codable, Sendable, Equatable {
     public var freeAgentsOnly = false
     public var gender = 0                // 0 = all, 1 = men, 2 = women
     public var rules: [AttributeRule] = []
+    /// With a role chosen, also list players who aren't natural in any of its positions.
+    public var roleAnyPosition = false
     public init() {}
+
+    /// Tolerates searches saved by older versions that lack newer fields.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func v<T: Decodable>(_ k: CodingKeys, _ d: T) -> T { (try? c.decodeIfPresent(T.self, forKey: k)) ?? d }
+        let base = PlayerFilter()
+        text = v(.text, base.text); nation = v(.nation, base.nation); division = v(.division, base.division)
+        minAge = v(.minAge, base.minAge); maxAge = v(.maxAge, base.maxAge)
+        minCA = v(.minCA, base.minCA); minPA = v(.minPA, base.minPA)
+        maxValue = v(.maxValue, base.maxValue); maxWage = v(.maxWage, base.maxWage)
+        positions = v(.positions, base.positions); expiringBy = v(.expiringBy, base.expiringBy)
+        listedOnly = v(.listedOnly, base.listedOnly); hideNotForSale = v(.hideNotForSale, base.hideNotForSale)
+        shortlistOnly = v(.shortlistOnly, base.shortlistOnly)
+        roleCode = v(.roleCode, base.roleCode); minRoleScore = v(.minRoleScore, base.minRoleScore)
+        minMeta = v(.minMeta, base.minMeta); minGrowth = v(.minGrowth, base.minGrowth)
+        onlyNew = v(.onlyNew, base.onlyNew); freeAgentsOnly = v(.freeAgentsOnly, base.freeAgentsOnly)
+        gender = v(.gender, base.gender); rules = v(.rules, base.rules)
+        roleAnyPosition = v(.roleAnyPosition, base.roleAnyPosition)
+    }
 }
 
 public struct StaffFilter: Codable, Sendable, Equatable {
@@ -181,6 +202,11 @@ public enum Filtering {
         let hidIdx = Dictionary(uniqueKeysWithValues: meta.hiddenKeys.enumerated().map { ($1, $0) })
         let perIdx = Dictionary(uniqueKeysWithValues: meta.personalityKeys.enumerated().map { ($1, $0) })
         let roleIdx = Roles.all.firstIndex { $0.code == f.roleCode }
+        // A role only makes sense for players who play one of its positions (unless positions are picked).
+        let rolePositions: Set<Int>? = roleIdx.flatMap { ri in
+            guard posIdx.isEmpty && !f.roleAnyPosition else { return nil }
+            return Set(Roles.all[ri].positions.compactMap { meta.positionKeys.firstIndex(of: $0) })
+        }
         let maxValueGbp = f.maxValue > 0 ? Double(f.maxValue) * gbpPerUnit : 0
         let maxWageGbp = f.maxWage > 0 ? Double(f.maxWage) * gbpPerUnit : 0
         let expiry = f.expiringBy > 0 ? "\(f.expiringBy)-12-31" : ""
@@ -199,6 +225,7 @@ public enum Filtering {
             if !nation.isEmpty && !(p.nat ?? "").lowercased().contains(nation) { return false }
             if !division.isEmpty && !(p.div ?? "").lowercased().contains(division) { return false }
             if !posIdx.isEmpty && r.positionSet.isDisjoint(with: posIdx) { return false }
+            if let rp = rolePositions, !rp.isEmpty, r.positionSet.isDisjoint(with: rp) { return false }
             if maxValueGbp > 0 { guard let v = p.val, Double(v) <= maxValueGbp else { return false } }
             if maxWageGbp > 0 { guard let w = p.wage, Double(w) <= maxWageGbp else { return false } }
             if !expiry.isEmpty { guard let e = p.exp, e <= expiry else { return false } }

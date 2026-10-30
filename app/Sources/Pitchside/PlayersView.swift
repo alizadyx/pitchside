@@ -72,7 +72,7 @@ struct PlayersView: View {
         .inspector(isPresented: Binding(get: { selection != nil }, set: { if !$0 { selection = nil } })) {
             Group {
                 if let id = selection, let row = store.playerRow(id) {
-                    PlayerDetail(row: row)
+                    PlayerDetail(row: row) { selection = nil }
                 } else {
                     Text("Select a player").foregroundStyle(.secondary)
                 }
@@ -83,6 +83,10 @@ struct PlayersView: View {
             if store.filter.shortlistOnly != shortlistOnly { store.filter.shortlistOnly = shortlistOnly }
         }
         .onChange(of: store.filter) { store.refilter() }
+        .onChange(of: store.filter.roleCode) { _, code in
+            // Picking a role means "who's best at it", so rank by it.
+            if !code.isEmpty { store.playerSort = [KeyPathComparator(\PlayerRow.selectedRoleScore, order: .reverse)] }
+        }
         .onChange(of: store.playerSort) { store.resort() }
         .onChange(of: store.rate) { store.refilter() }
     }
@@ -93,11 +97,13 @@ struct PlayersView: View {
 struct PlayersTable: View {
     @Binding var selection: UInt32?
     @Environment(Store.self) private var store
+    /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
+    @SceneStorage("table.players") private var columnLayout: TableColumnCustomization<PlayerRow>
 
     var body: some View {
         @Bindable var store = store
         let roleTitle = store.filter.roleCode.isEmpty ? "Best role" : store.filter.roleCode
-        Table(store.players, selection: $selection, sortOrder: $store.playerSort) {
+        Table(store.players, selection: $selection, sortOrder: $store.playerSort, columnCustomization: $columnLayout) {
             TableColumn("★", value: \.shortlistKey) { r in
                 Button { store.toggleShortlist(r.id) } label: {
                     Image(systemName: r.shortlisted ? "star.fill" : "star")
@@ -105,7 +111,7 @@ struct PlayersTable: View {
                 }
                 .buttonStyle(.plain)
             }
-            .width(20)
+            .width(20).customizationID("star")
             TableColumn("Name", value: \.name) { r in
                 HStack(spacing: 5) {
                     Text(r.name).fontWeight(.medium).lineLimit(1)
@@ -119,27 +125,27 @@ struct PlayersTable: View {
                     }
                 }
             }
-            .width(min: 140, ideal: 200)
+            .width(min: 140, ideal: 200).customizationID("name")
             TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }
-                .width(min: 30, ideal: 34, max: 40)
+                .width(min: 30, ideal: 34, max: 40).customizationID("age")
             TableColumn("Position", value: \.positions) { r in
                 Text(r.positions).foregroundStyle(.secondary).lineLimit(1)
             }
-            .width(min: 60, ideal: 110, max: 180)
+            .width(min: 60, ideal: 110, max: 180).customizationID("position")
             TableColumn("Club", value: \.club) { r in
                 Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1)
                     .foregroundStyle(r.club.isEmpty ? Color.secondary : Color.primary)
             }
-            .width(min: 90, ideal: 160, max: 260)
+            .width(min: 90, ideal: 160, max: 260).customizationID("club")
             TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }
-                .width(min: 32, ideal: 38, max: 44)
+                .width(min: 32, ideal: 38, max: 44).customizationID("ca")
             TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }
-                .width(min: 32, ideal: 38, max: 44)
+                .width(min: 32, ideal: 38, max: 44).customizationID("pa")
             TableColumn("Meta", value: \.meta) { r in
                 Text(String(format: "%.1f", r.meta)).monospacedDigit().fontWeight(.semibold)
                     .foregroundStyle(AttrColor.color(Int(r.meta.rounded())))
             }
-            .width(min: 36, ideal: 42, max: 50)
+            .width(min: 36, ideal: 42, max: 50).customizationID("meta")
             TableColumn(roleTitle, value: \.selectedRoleScore) { r in
                 HStack(spacing: 4) {
                     if store.filter.roleCode.isEmpty {
@@ -149,10 +155,10 @@ struct PlayersTable: View {
                         .foregroundStyle(AttrColor.color(Int(r.selectedRoleScore.rounded())))
                 }
             }
-            .width(min: 56, ideal: 76, max: 100)
+            .width(min: 56, ideal: 76, max: 100).customizationID("role")
             TableColumnForEach(store.columns(for: "players")) { c in
                 TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r, store: store) }
-                    .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
+                    .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
             }
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
@@ -189,9 +195,9 @@ struct PlayerFilterPanel: View {
             VStack(alignment: .leading, spacing: 10) {
                 FilterGroup(title: "Search", active: active.contains("search")) {
                     VStack(spacing: 6) {
-                        TextField("Name or club", text: $store.filter.text)
-                        TextField("Nationality", text: $store.filter.nation)
-                        TextField("Division", text: $store.filter.division)
+                        SuggestionField(placeholder: "Name or club", text: $store.filter.text, options: store.clubs)
+                        SuggestionField(placeholder: "Nationality", text: $store.filter.nation, options: store.nations)
+                        SuggestionField(placeholder: "Division", text: $store.filter.division, options: store.divisions)
                     }
                     .textFieldStyle(.roundedBorder)
                 }
@@ -235,6 +241,9 @@ struct PlayerFilterPanel: View {
                                 Slider(value: $store.filter.minRoleScore, in: 0...20, step: 0.5)
                                 Text(String(format: "%.1f", store.filter.minRoleScore)).monospacedDigit().frame(width: 32)
                             }
+                            Toggle("Include players who don't play there", isOn: $store.filter.roleAnyPosition)
+                                .font(.callout)
+                                .help("Off: only players who are natural in one of this role's positions (or the positions you picked)")
                         }
                     }
                 }
@@ -364,6 +373,7 @@ struct AttributeRulesEditor: View {
 
 struct PlayerDetail: View {
     let row: PlayerRow
+    var onClose: (() -> Void)? = nil
     @Environment(Store.self) private var store
 
     var body: some View {
@@ -409,7 +419,6 @@ struct PlayerDetail: View {
                     Text(p.n).font(.title2.bold()).lineLimit(2).minimumScaleFactor(0.7)
                         .contextMenu {
                             Button("Copy Name") { store.copyText([p.n]) }
-                            Button("Copy Last Name") { store.copyText([p.lastName]) }
                         }
                         .help("Right-click to copy the name for FM's search")
                     if row.isNew { Tag(text: "NEW", color: .purple) }
@@ -420,6 +429,7 @@ struct PlayerDetail: View {
             }
             Spacer(minLength: 4)
             VStack(spacing: 8) {
+                if let onClose { PanelCloseButton(action: onClose) }
                 Button { store.toggleShortlist(row.id) } label: {
                     Image(systemName: row.shortlisted ? "star.fill" : "star").font(.title3)
                         .foregroundStyle(row.shortlisted ? Theme.gold : Color.secondary)

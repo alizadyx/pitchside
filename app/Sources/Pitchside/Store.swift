@@ -125,6 +125,8 @@ final class Store {
     var selectedSlot: String? { didSet { refreshSuggestions() } }
     var suggestions: [SquadBuilder.Suggestion] = []
     var clubs: [String] = []
+    var nations: [String] = []
+    var divisions: [String] = []
     var seasonOverride: Int = UserDefaults.standard.integer(forKey: "seasonOverride") {
         didSet { UserDefaults.standard.set(seasonOverride, forKey: "seasonOverride"); rebuildRows() }
     }
@@ -216,12 +218,16 @@ final class Store {
             let p = RowBuilder.players(file.players, meta: file.meta, reference: ref, shortlist: shortlist,
                                        growth: growth, previousIds: prev)
             let clubs = SquadBuilder.clubs(p)
+            let nations = Array(Set(p.compactMap { $0.person.nat }.filter { !$0.isEmpty })).sorted()
+            let divisions = Array(Set(p.compactMap { $0.person.div }.filter { !$0.isEmpty })).sorted()
             let s = RowBuilder.staff(file.staff, reference: ref)
             await MainActor.run {
                 self.interestModel = nil
                 self.allPlayers = p
                 self.allStaff = s
                 self.clubs = clubs
+                self.nations = nations
+                self.divisions = divisions
                 self.refilter()
                 self.refilterStaff()
                 self.refreshSquad()
@@ -246,7 +252,12 @@ final class Store {
             out.sort(using: sort)
             if Task.isCancelled { return }
             let result = out
-            await MainActor.run { self.players = result }
+            await MainActor.run {
+                // The sort may have changed while filtering (picking a role re-sorts by it).
+                var rows = result
+                if self.playerSort != sort { rows.sort(using: self.playerSort) }
+                self.players = rows
+            }
         }
     }
 
@@ -385,12 +396,12 @@ final class Store {
     func money(_ gbp: Int?) -> String { Money.format(gbp, symbol: currency.symbol, perGbp: rate) }
 
     /// Puts a player's full name or surname on the clipboard, ready to paste into FM's search.
-    func copyName(_ ids: Set<UInt32>, lastOnly: Bool) {
-        copyText(ids.compactMap { playerRow($0) }.map { lastOnly ? $0.person.lastName : $0.name })
+    func copyName(_ ids: Set<UInt32>) {
+        copyText(ids.compactMap { playerRow($0) }.map(\.name))
     }
 
-    func copyStaffName(_ ids: Set<UInt32>, lastOnly: Bool) {
-        copyText(ids.compactMap { staffRow($0) }.map { lastOnly ? $0.person.lastName : $0.name })
+    func copyStaffName(_ ids: Set<UInt32>) {
+        copyText(ids.compactMap { staffRow($0) }.map(\.name))
     }
 
     func copyText(_ lines: [String]) {

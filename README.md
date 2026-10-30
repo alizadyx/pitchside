@@ -17,8 +17,9 @@ hidden attributes and potential, and plan your squad.
 - **Role ratings:** rank everyone by 23 tactical roles, or by a meta score weighted towards the
   attributes that matter most in FM's match engine.
 - **Your own columns:** add any stat, attribute, hidden attribute or personality trait as a column to the
-  player, squad, signings and growth tables, and sort by it.
-- **Right-click to copy** a player's name or surname, ready to paste into FM's search.
+  player, squad, signings and growth tables, sort by it, and drag column headers to reorder them.
+- **Right-click to copy** a player's name, ready to paste into FM's search.
+- **Search suggestions** for clubs, nationalities and divisions as you type.
 - **Player profiles:** all attributes with FM-style colours, hidden attributes, personality, positions
   on a pitch, best roles and star ratings.
 - **Squad builder:** pick your club (men's or women's side) and a formation, or build your own with any

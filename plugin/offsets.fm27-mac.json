@@ -1,6 +1,6 @@
 {
-  "Version": "fm27-mac 2026-10-30: players, contracts, staff, gender (verified on 5 players + Holland)",
-  "Verified": false,
+  "Version": "fm27-mac 2026-10-30: players, contracts, staff, gender (checked against in-game profiles)",
+  "Verified": true,
   "EngineImage": "game_plugin",
   "ObjUid": "0x11C",
   "PlayerOffsets": [

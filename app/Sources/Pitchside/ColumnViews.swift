@@ -123,10 +123,55 @@ struct PlayerContextItems: View {
     let store: Store
 
     var body: some View {
-        Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyName(ids, lastOnly: false) }
-        Button(ids.count > 1 ? "Copy Last Names" : "Copy Last Name") { store.copyName(ids, lastOnly: true) }
+        Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyName(ids) }
         Divider()
         Button("Add/Remove Shortlist") { ids.forEach { store.toggleShortlist($0) } }
         Button("Add/Remove from Comparison") { ids.forEach { store.toggleCompare($0) } }
+    }
+}
+
+/// A text field that offers matching values underneath as you type (clubs, nations, divisions).
+struct SuggestionField: View {
+    let placeholder: String
+    @Binding var text: String
+    let options: [String]
+    var limit = 6
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            TextField(placeholder, text: $text)
+                .onSubmit { if let first = matches.first { text = first } }
+            ForEach(matches, id: \.self) { m in
+                Button(m) { text = m }
+                    .buttonStyle(.link)
+                    .lineLimit(1)
+                    .padding(.leading, 6)
+            }
+        }
+    }
+
+    private var matches: [String] {
+        let q = text.trimmingCharacters(in: .whitespaces).lowercased()
+        guard q.count >= 2, !options.contains(text) else { return [] }
+        var starts: [String] = [], contains: [String] = []
+        for o in options {
+            let l = o.lowercased()
+            if l.hasPrefix(q) { starts.append(o) } else if l.contains(q) { contains.append(o) }
+            if starts.count >= limit { break }
+        }
+        return Array((starts + contains).prefix(limit))
+    }
+}
+
+/// Small close button for side panels (also closes with Esc).
+struct PanelCloseButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
+        .help("Close (Esc)")
     }
 }

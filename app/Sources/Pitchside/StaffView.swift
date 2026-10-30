@@ -3,6 +3,8 @@ import SwiftUI
 
 struct StaffView: View {
     @Environment(Store.self) private var store
+    /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
+    @SceneStorage("table.staff") private var columnLayout: TableColumnCustomization<StaffRow>
     @State private var selection: UInt32?
     @AppStorage("showStaffFilters") private var showFilters = true
 
@@ -65,15 +67,15 @@ struct StaffView: View {
                     .transition(.move(edge: .leading).combined(with: .opacity))
                     Divider()
                 }
-                Table(store.staff, selection: $selection, sortOrder: $store.staffSort) {
+                Table(store.staff, selection: $selection, sortOrder: $store.staffSort, columnCustomization: $columnLayout) {
                     TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
-                        .width(min: 130, ideal: 190)
-                    TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 42)
-                    TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }.width(min: 80, ideal: 140, max: 220)
+                        .width(min: 130, ideal: 190).customizationID("name")
+                    TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 42).customizationID("age")
+                    TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }.width(min: 80, ideal: 140, max: 220).customizationID("job")
                     TableColumn("Club", value: \.club) { r in Text(r.club).lineLimit(1).foregroundStyle(.secondary) }
-                        .width(min: 90, ideal: 150, max: 260)
-                    TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44)
-                    TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44)
+                        .width(min: 90, ideal: 150, max: 260).customizationID("club")
+                    TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
+                    TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                     TableColumn(AttributeGroups.label(store.staffColumnKey), value: \.selectedAttr) { r in
                         HStack(spacing: 6) {
                             AttrBox(value: r.selectedAttr)
@@ -81,24 +83,23 @@ struct StaffView: View {
                                 .foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
-                    .width(min: 80, ideal: 120, max: 160)
+                    .width(min: 80, ideal: 120, max: 160).customizationID("attr")
                     TableColumn("Contract", value: \.expires) { r in
                         Text(r.expires.isEmpty ? "—" : String(r.expires.prefix(7))).foregroundStyle(.secondary)
                     }
-                    .width(min: 54, ideal: 64, max: 80)
+                    .width(min: 54, ideal: 64, max: 80).customizationID("contract")
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: true))
                 .scrollContentBackground(.hidden)
                 .contextMenu(forSelectionType: UInt32.self) { ids in
-                    Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyStaffName(ids, lastOnly: false) }
-                    Button(ids.count > 1 ? "Copy Last Names" : "Copy Last Name") { store.copyStaffName(ids, lastOnly: true) }
+                    Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyStaffName(ids) }
                 }
             }
         }
         .background(Theme.bg)
         .inspector(isPresented: Binding(get: { selection != nil }, set: { if !$0 { selection = nil } })) {
             Group {
-                if let id = selection, let row = store.staffRow(id) { StaffDetail(row: row) }
+                if let id = selection, let row = store.staffRow(id) { StaffDetail(row: row) { selection = nil } }
                 else { Text("Select someone").foregroundStyle(.secondary) }
             }
             .inspectorColumnWidth(min: 320, ideal: 380, max: 560)
@@ -111,6 +112,7 @@ struct StaffView: View {
 
 struct StaffDetail: View {
     let row: StaffRow
+    var onClose: (() -> Void)? = nil
     @Environment(Store.self) private var store
 
     var body: some View {
@@ -119,7 +121,12 @@ struct StaffDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(p.n).font(.title2.bold()).textSelection(.enabled)
+                    HStack(alignment: .top) {
+                        Text(p.n).font(.title2.bold())
+                            .contextMenu { Button("Copy Name") { store.copyText([p.n]) } }
+                        Spacer(minLength: 4)
+                        if let onClose { PanelCloseButton(action: onClose) }
+                    }
                     Text([p.job, p.club].compactMap { $0 }.joined(separator: " · ")).foregroundStyle(.secondary)
                     Text("\(row.age) years · \(p.nat ?? "—")").foregroundStyle(.secondary)
                 }

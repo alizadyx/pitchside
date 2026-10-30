@@ -55,3 +55,33 @@ final class ColumnTests: XCTestCase {
         XCTAssertEqual(Person(id: 2, n: "Vitinha", ca: 1, pa: 1).lastName, "Vitinha")
     }
 }
+
+final class RoleFilterTests: XCTestCase {
+    func testRoleSearchOnlyListsPlayersWhoPlayThere() {
+        let meta = ExportMeta(scannedAt: nil, gameDate: nil, offsetsVersion: nil, offsetsVerified: nil, plugin: nil,
+                              scanMs: nil, playerAttrKeys: SquadTests.attrKeys, hiddenKeys: [],
+                              personalityKeys: ["Adaptability", "Ambition", "Loyalty", "Pressure"],
+                              positionKeys: SquadTests.posKeys, staffAttrKeys: [], warnings: nil)
+        var t = Factory()
+        let rows = RowBuilder.players([t.make("Great Striker", club: "A", pos: ["ST"], level: 18),
+                                       t.make("Holding Mid", club: "B", pos: ["DM"], level: 13)],
+                                      meta: meta, reference: Ages.date("2026-07-13")!, shortlist: [],
+                                      growth: [:], previousIds: nil)
+        var f = PlayerFilter()
+        f.roleCode = "DM"; f.minRoleScore = 12.5
+        XCTAssertEqual(Filtering.apply(f, to: rows, meta: meta, gbpPerUnit: 1).map(\.name), ["Holding Mid"])
+        f.roleAnyPosition = true
+        XCTAssertEqual(Filtering.apply(f, to: rows, meta: meta, gbpPerUnit: 1).count, 2)
+        f.roleAnyPosition = false; f.positions = ["ST"]
+        XCTAssertEqual(Filtering.apply(f, to: rows, meta: meta, gbpPerUnit: 1).map(\.name), ["Great Striker"],
+                       "picked positions take over from the role's own")
+    }
+
+    func testOldSavedSearchStillLoads() throws {
+        let json = #"{"text":"Ars","minAge":18,"maxAge":30,"positions":["DM"],"roleCode":"DM"}"#
+        let f = try JSONDecoder().decode(PlayerFilter.self, from: Data(json.utf8))
+        XCTAssertEqual(f.text, "Ars")
+        XCTAssertEqual(f.positions, ["DM"])
+        XCTAssertEqual(f.minCA, 0, "missing fields fall back to defaults")
+    }
+}

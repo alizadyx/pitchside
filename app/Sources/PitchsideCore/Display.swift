@@ -57,7 +57,7 @@ extension PlayerFilter {
         case "onlyNew": onlyNew = false
         case "free": freeAgentsOnly = false
         case "positions": positions = []
-        case "role": roleCode = ""; minRoleScore = 0
+        case "role": roleCode = ""; minRoleScore = 0; roleAnyPosition = false
         case "maxValue": maxValue = 0
         case "maxWage": maxWage = 0
         case "expiring": expiringBy = 0

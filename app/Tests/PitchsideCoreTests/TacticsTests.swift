@@ -82,8 +82,10 @@ final class TacticsTests: XCTestCase {
             XCTAssertFalse(Formations.roles(for: pos).isEmpty, "IP roles at \(pos)")
             XCTAssertFalse(Formations.oopRoles(for: pos).isEmpty, "OOP roles at \(pos)")
         }
-        for f in Formations.all {
+        XCTAssertEqual(Set(Formations.presets.map(\.name)).count, Formations.presets.count)
+        for f in Formations.presets {
             XCTAssertEqual(f.slots.count, 11, f.name)
+            XCTAssertEqual(f.slots.filter { $0.position == "GK" }.count, 1, f.name)
             for s in f.slots {
                 XCTAssertTrue(Formations.roles(for: s.position).contains { $0.code == s.role }, "\(f.name) \(s.label) \(s.role)")
                 XCTAssertTrue(Formations.oopRoles(for: s.position).contains { $0.code == s.oop }, "\(f.name) \(s.label) \(s.oop)")
@@ -164,5 +166,77 @@ final class TacticsTests: XCTestCase {
         XCTAssertEqual(ins.styles.first?.name == "Control Possession" || ins.styles.first?.name == "Tiki-Taka", true,
                        ins.styles.map(\.name).joined(separator: ","))
         XCTAssertTrue(ins.items.allSatisfy { !$0.reason.isEmpty })
+    }
+
+    func testMyTacticKeepsRolesAndPointsOutBetterOnes() {
+        var t = Factory()
+        var people = t.homeSquad()
+        let ai = { (k: String) in SquadTests.attrKeys.firstIndex(of: k)! }
+        // The striker is a pure target man: Target Forward should beat Centre Forward clearly.
+        let st = people.firstIndex { $0.n == "Weak Striker" }!
+        for k in ["Heading", "JumpingReach", "Strength", "Bravery", "Aggression", "Balance"] { people[st].a![ai(k)] = 19 }
+        let rows = rows(people).filter { $0.person.club == "Home FC" }
+        var f = Formations.all[0]
+        let si = f.slots.firstIndex { $0.position == "ST" }!
+        f.slots[si].role = "F9"
+        let fit = TacticsAdvisor.fit(f, squad: rows, meta: meta, keepRoles: true)
+        let pick = fit.picks[si]
+        XCTAssertEqual(pick.slot.role, "F9", "your role is kept")
+        XCTAssertEqual(pick.betterIP?.code, "TF")
+        XCTAssertEqual(SquadBuilder.betterRoles(for: pick.player!, at: f.slots[si]).ip?.code, "TF")
+        let opts = SquadBuilder.options(for: f.slots[si], squad: rows, meta: meta)
+        XCTAssertEqual(opts.first?.row.name, "Weak Striker")
+    }
+
+    func testLeagueComparisonAndStance() {
+        var t = Factory()
+        var people: [Person] = []
+        // Six clubs in one league, of rising quality; plus a club elsewhere.
+        for (ci, level) in [10, 11, 12, 13, 14, 16].enumerated() {
+            for (i, pos) in ["GK", "DL", "DC", "DC", "DR", "DM", "MC", "MC", "AML", "AMR", "ST", "MC", "DC"].enumerated() {
+                var p = t.make("C\(ci) P\(i)", club: "Club \(ci)", pos: [pos], level: UInt8(level))
+                p.div = "Test League"
+                people.append(p)
+            }
+        }
+        for (i, pos) in ["GK", "DL", "DC", "DC", "DR", "DM", "MC", "MC", "AML", "AMR", "ST"].enumerated() {
+            var p = t.make("Far P\(i)", club: "Far Away", pos: [pos], level: 18); p.div = "Other League"
+            people.append(p)
+        }
+        let r = rows(people)
+        XCTAssertEqual(TeamCompare.clubs(in: "Test League", rows: r).count, 6)
+        let league = TeamCompare.league("Test League", rows: r, meta: meta, basis: .firstTeam)
+        XCTAssertEqual(league.count, 6)
+        XCTAssertEqual(league.first?.club, "Club 5", "strongest first")
+        XCTAssertGreaterThan(league[0]["level"], league[5]["level"])
+        XCTAssertEqual(TeamCompare.stance(for: "Club 5", in: league)?.0, .favourites)
+        XCTAssertEqual(TeamCompare.stance(for: "Club 0", in: league)?.0, .underdogs)
+        XCTAssertEqual(TeamCompare.stance(for: "Club 2", in: league)?.0, .even)
+        XCTAssertTrue(TeamCompare.notes(for: "Club 5", in: league).first?.hasPrefix("1st strongest XI of 6") ?? false)
+        // Head to head across leagues.
+        let far = TeamCompare.profile(club: "Far Away", rows: r, meta: meta, basis: .firstTeam)!
+        XCTAssertTrue(TeamCompare.summary(league[0], vs: far).contains("weaker"))
+        // Top 18 counts the bench too.
+        let top18 = TeamCompare.profile(club: "Club 5", rows: r, meta: meta, basis: .top18)!
+        XCTAssertEqual(top18.players.count, 13)
+        // Instructions quote the league.
+        let avg = TeamCompare.averageTactical(league)
+        let ins = TacticsAdvisor.instructions(league[0].fit, meta: meta, stance: .even, league: avg)
+        XCTAssertTrue(ins.items.allSatisfy { !$0.reason.contains("squad average") || $0.reason.contains("league") })
+    }
+
+    func testWholeClubPromotions() {
+        var t = Factory()
+        var people = t.homeSquad()
+        for i in people.indices { people[i].tm = 1; people[i].tage = 100; people[i].trep = 6000 }
+        var kid = t.make("Wonderkid", club: "Home FC", pos: ["ST"], level: 17, age: 18)
+        kid.tm = 2; kid.tage = 18; kid.trep = 1500
+        people.append(kid)
+        let all = rows(people).filter { $0.person.club == "Home FC" }
+        let first = all.filter { $0.person.tm == 1 }
+        let res = TeamCompare.promotions(formation: Formations.all[0], firstTeam: first, wholeClub: all, meta: meta)
+        XCTAssertGreaterThan(res.club, res.first)
+        XCTAssertEqual(res.promotions.map(\.player.name), ["Wonderkid"])
+        XCTAssertEqual(res.promotions.first?.replaces?.name, "Weak Striker")
     }
 }

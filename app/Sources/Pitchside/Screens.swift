@@ -69,6 +69,7 @@ struct SquadView: View {
                             if let a = report.slots.first(where: { $0.slot.label == store.selectedSlot }) {
                                 SlotCard(a: a)
                             }
+                            ClubXICard()
                         }
                         .padding(12)
                     }
@@ -390,6 +391,43 @@ extension SquadView {
             }
         }
         .padding(.horizontal, 10).padding(.bottom, 8)
+    }
+}
+
+/// Your tactic filled from the whole club (youth teams too) against the first team alone.
+struct ClubXICard: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        if let p = store.clubPromotions {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("BEST XI AT THE WHOLE CLUB").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(String(format: "%.1f vs first team %.1f (%+.1f)", p.club, p.first, p.club - p.first))
+                        .font(.callout).monospacedDigit()
+                        .foregroundStyle(p.club - p.first > 0.05 ? .green : .secondary)
+                }
+                if p.promotions.isEmpty {
+                    Text("Nobody outside the first team would get into this XI.").font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(p.promotions) { pr in
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Image(systemName: "arrow.up.circle.fill").foregroundStyle(.green)
+                        Text("\(pr.player.name) (\(team(pr.player))) would start at \(pr.slot): "
+                             + String(format: "%.1f", pr.score)
+                             + (pr.replaces.map { " vs \($0.person.lastName) " + String(format: "%.1f", pr.replacedScore) } ?? ""))
+                            .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .frame(maxWidth: 560, alignment: .leading)
+            .fmCard()
+        }
+    }
+
+    private func team(_ r: PlayerRow) -> String {
+        store.clubTeams.first { $0.id == r.person.tm && !$0.approximate }?.label ?? "age \(r.age)"
     }
 }
 

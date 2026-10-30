@@ -141,8 +141,9 @@ final class Store {
     private(set) var tacticsFits: [TacticsAdvisor.FormationFit] = []
     /// The formation being looked at in Tactics (nil = the best one).
     var tacticsChoice: String? { didSet { refreshTacticsDetail() } }
-    var tacticsStance: Int = UserDefaults.standard.object(forKey: "tacticsStance") as? Int ?? 1 {
-        didSet { UserDefaults.standard.set(tacticsStance, forKey: "tacticsStance"); refreshTacticsDetail() }
+    /// -1 = work it out from where your XI ranks in your league.
+    var tacticsStance: Int = UserDefaults.standard.object(forKey: "tacticsStance2") as? Int ?? -1 {
+        didSet { UserDefaults.standard.set(tacticsStance, forKey: "tacticsStance2"); refreshTacticsDetail() }
     }
     private(set) var tacticsSetPieces: TacticsAdvisor.SetPieces?
     private(set) var tacticsInstructions: TacticsAdvisor.Instructions?
@@ -156,6 +157,8 @@ final class Store {
         didSet { UserDefaults.standard.set(tacticsSource, forKey: "tacticsSource"); refreshTacticsDetail() }
     }
     var detailFit: TacticsAdvisor.FormationFit? { tacticsSource == 0 ? (myTacticFit ?? tacticsFit) : tacticsFit }
+    /// Your tactic filled from the whole club vs the first team (when a team is chosen).
+    private(set) var clubPromotions: (first: Double, club: Double, promotions: [TeamCompare.Promotion])?
     /// Best signing per position of your tactic (computed on request).
     private(set) var upgrades: [SquadBuilder.Upgrade] = []
     private(set) var upgradesBusy = false
@@ -717,6 +720,7 @@ final class Store {
                                               meta: meta, season: season)
         buildSquadRows()
         refreshTactics()
+        refreshLeague()
         if columns(for: "players").contains(where: { $0.id == "gen.interest" }) { refilter() }
         if selectedSlot == nil || !(squadReport?.slots.contains { $0.slot.label == selectedSlot } ?? false) {
             selectedSlot = squadReport?.slots.max { $0.weakness < $1.weakness }?.slot.label
@@ -732,6 +736,13 @@ final class Store {
         let shapes = Formations.presets + customFormations.filter { c in !Formations.presets.contains { $0.name == c.name } }
         tacticsFits = TacticsAdvisor.rankFormations(shapes, squad: report.squad, meta: meta)
         myTacticFit = TacticsAdvisor.fit(workingFormation, squad: report.squad, meta: meta, keepRoles: true)
+        if clubTeams.count > 1 && squadTeamRank >= 0 {
+            let whole = teamRows.filter { $0.person.club == myClub }
+            clubPromotions = TeamCompare.promotions(formation: workingFormation, firstTeam: report.squad,
+                                                    wholeClub: whole, meta: meta)
+        } else {
+            clubPromotions = nil
+        }
         upgrades = []
         refreshTacticsDetail()
     }
@@ -739,8 +750,89 @@ final class Store {
     private func refreshTacticsDetail() {
         guard let meta, let fit = detailFit else { tacticsSetPieces = nil; tacticsInstructions = nil; return }
         tacticsSetPieces = TacticsAdvisor.setPieces(xi: fit.picks.compactMap(\.player), bench: fit.bench, meta: meta)
-        tacticsInstructions = TacticsAdvisor.instructions(fit, meta: meta,
-                                                          stance: TacticsAdvisor.Stance(rawValue: tacticsStance) ?? .even)
+        tacticsInstructions = TacticsAdvisor.instructions(fit, meta: meta, stance: resolvedStance,
+                                                          league: TeamCompare.averageTactical(leagueProfiles))
+    }
+
+    var resolvedStance: TacticsAdvisor.Stance {
+        if tacticsStance >= 0 { return TacticsAdvisor.Stance(rawValue: tacticsStance) ?? .even }
+        return autoStance?.0 ?? .even
+    }
+    var autoStance: (TacticsAdvisor.Stance, rank: Int, of: Int)? { TeamCompare.stance(for: myClub, in: leagueProfiles) }
+
+    // MARK: - Comparisons
+
+    /// Which players clubs are judged on: 0 first-team XI, 1 best XI at the club, 2 top 18.
+    var compareBasis: Int = UserDefaults.standard.object(forKey: "compareBasis") as? Int ?? 0 {
+        didSet { UserDefaults.standard.set(compareBasis, forKey: "compareBasis"); refreshLeague() }
+    }
+    var basis: TeamCompare.Basis { TeamCompare.Basis(rawValue: compareBasis) ?? .firstTeam }
+    /// club → the division most of its players are registered in (current men's/women's side).
+    private(set) var clubLeague: [String: String] = [:]
+    private var clubLeagueKey = ""
+    var leagues: [String] { Array(Set(clubLeague.values)).sorted() }
+    var myLeague: String? { clubLeague[myClub] }
+    private(set) var profileCache: [String: TeamCompare.TeamProfile] = [:]
+    private(set) var compareJobs = 0
+    var compareBusy: Bool { compareJobs > 0 }
+    /// Every club in your league, for league averages and the auto "going into games" setting.
+    private(set) var leagueProfiles: [TeamCompare.TeamProfile] = []
+
+    private func cacheKey(_ club: String) -> String { "\(compareBasis)|\(squadWomen)|\(club)" }
+    func profile(_ club: String) -> TeamCompare.TeamProfile? { profileCache[cacheKey(club)] }
+    func clubs(inLeague league: String) -> [String] { clubLeague.filter { $0.value == league }.map(\.key).sorted() }
+
+    /// Works out profiles for `clubs` in the background (cached per basis and side).
+    func ensureProfiles(_ clubs: [String]) {
+        guard let meta else { return }
+        let missing = Array(Set(clubs.filter { !$0.isEmpty && profileCache[cacheKey($0)] == nil }))
+        guard !missing.isEmpty else { return }
+        let wanted = Set(missing)
+        let rows = teamRows, basis = basis, season = season
+        let keys = Dictionary(uniqueKeysWithValues: missing.map { ($0, cacheKey($0)) })
+        compareJobs += 1
+        Task.detached(priority: .userInitiated) {
+            let byClub = Dictionary(grouping: rows.filter { $0.person.club.map(wanted.contains) ?? false },
+                                    by: { $0.person.club ?? "" })
+            var out: [String: TeamCompare.TeamProfile] = [:]
+            for c in missing {
+                if let p = TeamCompare.profile(club: c, rows: byClub[c] ?? [], meta: meta, basis: basis, season: season) {
+                    out[keys[c]!] = p
+                }
+            }
+            await MainActor.run {
+                self.profileCache.merge(out) { $1 }
+                self.compareJobs -= 1
+                self.updateLeagueProfiles()
+            }
+        }
+    }
+
+    /// Recomputes which league each club plays in (once per scan and side), then your league's profiles.
+    func refreshLeague() {
+        let key = "\(allPlayers.count)|\(squadWomen)"
+        if key != clubLeagueKey {
+            clubLeagueKey = key
+            profileCache = [:]
+            let rows = teamRows
+            Task.detached(priority: .utility) {
+                var count: [String: [String: Int]] = [:]
+                for r in rows { if let c = r.person.club, let d = r.person.div, !d.isEmpty { count[c, default: [:]][d, default: 0] += 1 } }
+                let main = count.compactMapValues { divs in divs.max { a, b in a.value < b.value }?.key }
+                await MainActor.run { self.clubLeague = main; self.refreshLeague() }
+            }
+            return
+        }
+        updateLeagueProfiles()
+        if let l = myLeague { ensureProfiles(clubs(inLeague: l)) }
+    }
+
+    private func updateLeagueProfiles() {
+        guard let l = myLeague else { leagueProfiles = []; return }
+        let ps = clubs(inLeague: l).compactMap { profile($0) }
+        let changed = ps.map(\.club) != leagueProfiles.map(\.club) || ps.first?.values != leagueProfiles.first?.values
+        leagueProfiles = ps
+        if changed { refreshTacticsDetail() }
     }
 
     private func buildSquadRows() {

@@ -481,11 +481,20 @@ public enum TacticsAdvisor {
         InstructionSpec(phase: "Set pieces", name: "Play For Set Pieces", options: ["On"]),
     ]
 
-    public static func instructions(_ fit: FormationFit, meta: ExportMeta, stance: Stance) -> Instructions {
+    /// With `league` (the league's average profile), reasons also quote the league figure and a few
+    /// rules check you against the league as well as against your own squad average.
+    public static func instructions(_ fit: FormationFit, meta: ExportMeta, stance: Stance,
+                                    league: Profile? = nil) -> Instructions {
         let P = profile(fit, meta: meta)
         let b = P.base
         func f(_ x: Double) -> String { String(format: "%.1f", x) }
-        func vs(_ label: String, _ x: Double) -> String { "\(label) \(f(x)) vs squad average \(f(b))" }
+        func vs(_ label: String, _ k: KeyPath<Profile, Double>) -> String {
+            var t = "\(label) \(f(P[keyPath: k])) · squad average \(f(b))"
+            if let L = league { t += " · league \(f(L[keyPath: k]))" }
+            return t
+        }
+        /// How far above (+) or below (−) the league average a group is; 0 without league data.
+        func vsLeague(_ k: KeyPath<Profile, Double>) -> Double { league.map { P[keyPath: k] - $0[keyPath: k] } ?? 0 }
         var out: [Instruction] = []
         func add(_ phase: String, _ name: String, _ setting: String, _ reason: String, _ d: Double) {
             out.append(Instruction(phase: phase, name: name, setting: setting, reason: reason, strength: min(1, abs(d) / 3)))
@@ -494,37 +503,37 @@ public enum TacticsAdvisor {
 
         // In possession
         let tech = P.technique - b
-        let fast = P.frontSpeed - b
-        if tech >= 2 { add(ip, "Passing Directness", "Much Shorter", vs("Passing, first touch, technique & composure", P.technique), tech) }
-        else if tech >= 0.8 { add(ip, "Passing Directness", "Shorter", vs("Passing, first touch, technique & composure", P.technique), tech) }
+        let fast = P.frontSpeed - b - (league != nil && vsLeague(\.frontSpeed) < -0.5 ? 1 : 0)
+        if tech >= 2 { add(ip, "Passing Directness", "Much Shorter", vs("Passing, first touch, technique & composure", \.technique), tech) }
+        else if tech >= 0.8 { add(ip, "Passing Directness", "Shorter", vs("Passing, first touch, technique & composure", \.technique), tech) }
         else if fast >= 1.2 && tech < 0.3 { add(ip, "Passing Directness", "More Direct", "Fast forwards (\(f(P.frontSpeed))) but technique only \(f(P.technique)) — get the ball to them early", fast) }
         let dec = P.decisions - b
-        if dec >= 1 { add(ip, "Tempo", "Higher", vs("Decisions, anticipation, first touch & technique", P.decisions), dec) }
-        else if dec <= -1 { add(ip, "Tempo", "Lower", vs("Decisions, anticipation, first touch & technique", P.decisions) + " — give them time", dec) }
+        if dec >= 1 { add(ip, "Tempo", "Higher", vs("Decisions, anticipation, first touch & technique", \.decisions), dec) }
+        else if dec <= -1 { add(ip, "Tempo", "Lower", vs("Decisions, anticipation, first touch & technique", \.decisions) + " — give them time", dec) }
         if !P.hasWideAttackers { add(ip, "Team Width", "Narrower", "No wide players in this shape", 2) }
-        else if P.wideAttack - b >= 1 { add(ip, "Team Width", "Wider", vs("Wide players' crossing, dribbling & pace", P.wideAttack), P.wideAttack - b) }
-        if fast >= 1.5 { add(ip, "Attacking Transition", "Counter", vs("Forwards' pace, acceleration & movement", P.frontSpeed), fast) }
+        else if P.wideAttack - b >= 1 { add(ip, "Team Width", "Wider", vs("Wide players' crossing, dribbling & pace", \.wideAttack), P.wideAttack - b) }
+        if fast >= 1.5 { add(ip, "Attacking Transition", "Counter", vs("Forwards' pace, acceleration & movement", \.frontSpeed), fast) }
         else if tech >= 1 && fast < 0.5 { add(ip, "Attacking Transition", "Hold Shape", "Technical side without quick forwards — keep the ball and build", tech) }
         let fl = P.flair - b
-        if fl >= 1.5 { add(ip, "Creative Freedom", "Be More Expressive", vs("Flair & vision", P.flair), fl) }
-        else if fl <= -1.5 { add(ip, "Creative Freedom", "Be More Disciplined", vs("Flair & vision", P.flair), fl) }
+        if fl >= 1.5 { add(ip, "Creative Freedom", "Be More Expressive", vs("Flair & vision", \.flair), fl) }
+        else if fl <= -1.5 { add(ip, "Creative Freedom", "Be More Disciplined", vs("Flair & vision", \.flair), fl) }
         if fast >= 1.2 { add(ip, "Pass Reception", "Into Space", "Forwards are quick (\(f(P.frontSpeed))) — play balls in behind", fast) }
         else if tech >= 1 && fast < 0 { add(ip, "Pass Reception", "Into Feet", "Good on the ball (\(f(P.technique))) but not quick up front (\(f(P.frontSpeed)))", tech) }
-        if P.dribbling - b >= 1.5 { add(ip, "Dribbling", "Run At Defence", vs("Attackers' dribbling & flair", P.dribbling), P.dribbling - b) }
+        if P.dribbling - b >= 1.5 { add(ip, "Dribbling", "Run At Defence", vs("Attackers' dribbling & flair", \.dribbling), P.dribbling - b) }
         let lr = P.leftSide - P.rightSide
         if P.hasWideAttackers && lr >= 0.8 { add(ip, "Progress Through", "Focus Play Down The Left", "Left side \(f(P.leftSide)) vs right \(f(P.rightSide))", lr) }
         else if P.hasWideAttackers && lr <= -0.8 { add(ip, "Progress Through", "Focus Play Down The Right", "Right side \(f(P.rightSide)) vs left \(f(P.leftSide))", -lr) }
         else if P.centre - max(P.leftSide, P.rightSide) >= 0.8 { add(ip, "Progress Through", "Focus Play Down The Middle", "Central players \(f(P.centre)) are your strongest line", P.centre - max(P.leftSide, P.rightSide)) }
         let air = P.strikerAerial - b
         if P.hasWideAttackers {
-            if air >= 1.5 { add(ip, "Crossing Style", "Floated Crosses", vs("Strikers' heading, jumping & strength", P.strikerAerial), air) }
+            if air >= 1.5 { add(ip, "Crossing Style", "Floated Crosses", vs("Strikers' heading, jumping & strength", \.strikerAerial), air) }
             else if air <= -1 { add(ip, "Crossing Style", "Low Crosses", "Strikers are not aerial threats (\(f(P.strikerAerial)))", air) }
             else if P.wideAttack - b >= 1 { add(ip, "Crossing Style", "Whipped Crosses", "Good crossers out wide (\(f(P.wideAttack)))", P.wideAttack - b) }
         }
         let ls = P.longShots - b
-        if ls >= 1.5 { add(ip, "Shots From Distance", "Shoot On Sight", vs("Midfield & attack long shots", P.longShots), ls) }
+        if ls >= 1.5 { add(ip, "Shots From Distance", "Shoot On Sight", vs("Midfield & attack long shots", \.longShots), ls) }
         else if ls <= -1 {
-            add(ip, "Shots From Distance", "Stay Patient", vs("Long shots", P.longShots), ls)
+            add(ip, "Shots From Distance", "Stay Patient", vs("Long shots", \.longShots), ls)
             add(ip, "Patience", "Work Ball Into Box", "Poor shooters from range (\(f(P.longShots))) — get closer before shooting", ls)
         }
         let cbp = P.cbPlaying - b
@@ -548,28 +557,34 @@ public enum TacticsAdvisor {
         }
 
         // Out of possession
-        let fw = P.frontWork - b
-        if fw >= 1 { add(op, "Line Of Engagement", "High", vs("Forwards' work rate, stamina, aggression & teamwork", P.frontWork), fw) }
-        else if fw <= -1 { add(op, "Line Of Engagement", "Low", vs("Forwards' work rate & stamina", P.frontWork) + " — they won't press well", fw) }
-        let ln = P.lineSpeed - b
-        if ln >= 1 { add(op, "Defensive Line", "Higher", vs("Centre-backs' pace, acceleration & anticipation", P.lineSpeed), ln) }
-        else if ln <= -1 { add(op, "Defensive Line", "Deeper", vs("Centre-backs' pace & anticipation", P.lineSpeed) + " — avoid balls in behind", ln) }
+        let fw = P.frontWork - b - (league != nil && vsLeague(\.frontWork) < -1 ? 1 : 0)
+        if fw >= 1 { add(op, "Line Of Engagement", "High", vs("Forwards' work rate, stamina, aggression & teamwork", \.frontWork), fw) }
+        else if fw <= -1 { add(op, "Line Of Engagement", "Low", vs("Forwards' work rate & stamina", \.frontWork) + " — they won't press well", fw) }
+        // A high line needs centre-backs quick for this league, not just quicker than your own midfield.
+        let ln: Double = {
+            let own = P.lineSpeed - b
+            guard league != nil else { return own }
+            let rel = vsLeague(\.lineSpeed)
+            return own > 0 ? min(own, rel + 1) : min(own, rel)
+        }()
+        if ln >= 1 { add(op, "Defensive Line", "Higher", vs("Centre-backs' pace, acceleration & anticipation", \.lineSpeed), ln) }
+        else if ln <= -1 { add(op, "Defensive Line", "Deeper", vs("Centre-backs' pace & anticipation", \.lineSpeed) + " — avoid balls in behind", ln) }
         if ln >= 1.5 { add(op, "Defensive Line Behaviour", "Hold Line", "Quick, alert centre-backs can step up together", ln) }
         else if ln <= -1.5 { add(op, "Defensive Line Behaviour", "Drop Off", "Slow centre-backs (\(f(P.lineSpeed))) need a head start", ln) }
-        let wk = P.work - b
-        if wk >= 1 { add(op, "Pressing Intensity", "Higher", vs("Work rate, stamina, teamwork & fitness", P.work), wk) }
-        else if wk <= -1 { add(op, "Pressing Intensity", "Lower", vs("Work rate & stamina", P.work), wk) }
+        let wk = P.work - b - (league != nil && vsLeague(\.work) < -1 ? 1 : 0)
+        if wk >= 1 { add(op, "Pressing Intensity", "Higher", vs("Work rate, stamina, teamwork & fitness", \.work), wk) }
+        else if wk <= -1 { add(op, "Pressing Intensity", "Lower", vs("Work rate & stamina", \.work), wk) }
         if wk >= 1 && P.speed - b >= 0 { add(op, "Defensive Transition", "Counter-Press", "Hard-working (\(f(P.work))) and quick enough (\(f(P.speed))) to win it back straight away", wk) }
         else if wk <= -0.8 { add(op, "Defensive Transition", "Regroup", "Not built to press after losing it (\(f(P.work)))", wk) }
         let tk = P.tackling - b
         let calm = (P.temperament ?? 12) >= 11
-        if tk >= 1 && calm { add(op, "Tackling", "Get Stuck In", vs("Tackling, aggression & bravery", P.tackling), tk) }
-        else if tk <= -1 || !calm { add(op, "Tackling", "Stay On Feet", calm ? vs("Tackling", P.tackling) : "Hot-headed side — avoid cards", max(abs(tk), 1)) }
+        if tk >= 1 && calm { add(op, "Tackling", "Get Stuck In", vs("Tackling, aggression & bravery", \.tackling), tk) }
+        else if tk <= -1 || !calm { add(op, "Tackling", "Stay On Feet", calm ? vs("Tackling", \.tackling) : "Hot-headed side — avoid cards", max(abs(tk), 1)) }
         let fbd = P.fullbackDefence - b, md = P.midDefence - b
         if P.hasWideAttackers && fbd >= 1 && fbd > md { add(op, "Pressing Trap", "Trap Outside", "Full-backs defend well (\(f(P.fullbackDefence))) — force play wide", fbd) }
         else if md >= 1 && md > fbd { add(op, "Pressing Trap", "Trap Inside", "Strong central midfield defending (\(f(P.midDefence)))", md) }
         let cba = P.cbAerial - b
-        if cba >= 1.5 { add(op, "Cross Engagement", "Invite Crosses", vs("Centre-backs' heading, jumping & strength", P.cbAerial), cba) }
+        if cba >= 1.5 { add(op, "Cross Engagement", "Invite Crosses", vs("Centre-backs' heading, jumping & strength", \.cbAerial), cba) }
         else if fbd >= 0.5 && cba <= 0 { add(op, "Cross Engagement", "Stop Crosses", "Centre-backs not dominant in the air (\(f(P.cbAerial)))", max(fbd, 1)) }
         if fw >= 1 { add(op, "Prevent Short GK Distribution", "On", "You press high anyway — make their keeper kick long", fw) }
 

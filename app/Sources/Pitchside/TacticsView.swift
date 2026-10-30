@@ -260,9 +260,18 @@ struct InstructionsPane: View {
                     HStack(spacing: 12) {
                         SourcePicker()
                         Picker("Going into games", selection: $store.tacticsStance) {
+                            Text(autoLabel).tag(-1)
+                            Divider()
                             ForEach(TacticsAdvisor.Stance.allCases) { Text($0.title).tag($0.rawValue) }
                         }
                         .fixedSize()
+                        .help("Auto works it out from where your XI ranks in your league (Compare teams)")
+                        if !store.leagueProfiles.isEmpty {
+                            Text("League: \(store.myLeague ?? "") (\(store.leagueProfiles.count) clubs)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else if store.compareBusy {
+                            ProgressView().controlSize(.small)
+                        }
                         Spacer()
                         Button {
                             store.applySuggestedInstructions()
@@ -280,6 +289,11 @@ struct InstructionsPane: View {
                 .padding(14)
             }
         }
+    }
+
+    private var autoLabel: String {
+        guard let a = store.autoStance else { return "Auto (needs your league)" }
+        return "Auto: \(a.0.title.lowercased()) (\(a.rank) of \(a.of))"
     }
 
     private func mentalityCard(_ ins: TacticsAdvisor.Instructions) -> some View {

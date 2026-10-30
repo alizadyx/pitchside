@@ -48,12 +48,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case players, squad, radar, staff, shortlist, calibration
+    case players, squad, compare, radar, staff, shortlist, calibration
     var id: String { rawValue }
     var title: String {
         switch self {
         case .players: "Players"
         case .squad: "Tactics & squad"
+        case .compare: "Compare teams"
         case .radar: "Growth & regens"
         case .staff: "Staff"
         case .shortlist: "Shortlist"
@@ -64,6 +65,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .players: "person.3.fill"
         case .squad: "sportscourt.fill"
+        case .compare: "chart.bar.xaxis"
         case .radar: "chart.line.uptrend.xyaxis"
         case .staff: "person.crop.rectangle.stack.fill"
         case .shortlist: "star.fill"
@@ -99,6 +101,7 @@ struct ContentView: View {
                     switch section ?? .players {
                     case .players: PlayersView(shortlistOnly: false)
                     case .squad: SquadView()
+                    case .compare: TeamsCompareView()
                     case .radar: RadarView()
                     case .shortlist: PlayersView(shortlistOnly: true)
                     case .staff: StaffView()

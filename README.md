@@ -17,13 +17,22 @@ hidden attributes and potential, and plan your squad.
   positions (picked on a pitch), value, wage, contract expiry and transfer status. You can also set any
   attribute minimum, including hidden and personality ones ("Pace ≥ 15", "Consistency ≥ 14").
 - **FM27 role ratings:** every In Possession and Out of Possession role in FM27 (79 in all), using the
-  key and preferable attributes the game itself highlights. The scores rank roles in the same order as
-  FM's role stars. There is also a meta score weighted towards the attributes that matter most in FM's
-  match engine.
-- **Tactics:** finds the formation that suits your squad best, with the best IP and OOP role for every
-  player and who's out of position. It also picks your set-piece takers (corners from each side, free
-  kicks, penalties, long throws, who attacks the ball and who stays back) and captains, and suggests
-  team instructions for both phases, a mentality and a tactical style, each with the attributes behind it.
+  key and preferable attributes the game itself highlights on the player screen. The scores rank roles
+  in the same order as FM's role stars (70 of 73 test comparisons, the rest near-ties). There is also a
+  meta score weighted towards the attributes that matter most in FM's match engine.
+- **Tactics & squad:** build your own tactic (25 shapes or a blank pitch, any position, any IP and OOP
+  role, your mentality, style and team instructions), saved under a name. See your best XI in it,
+  everyone at the club who could play each position, when a player would suit another role better,
+  and the signings that would improve each position, or the biggest upgrades across the whole team.
+  **Suggested** ranks every shape for your squad with the best roles; **Set pieces** picks corner,
+  free-kick and penalty takers, aerial targets, who stays back and captains; **Instructions** suggests a
+  mentality, style and team instructions with the attributes behind each, against your squad and your
+  league. **My squad** and **Timeline** split by first team, U21 and U18, and show what the whole club's
+  best XI would be, naming youngsters who'd start.
+- **Compare teams:** your league as a sortable table (XI level, depth, CA/PA, each line, technique,
+  pace, work rate, aerial threat, set pieces, age, wages) with a radar against the league average and
+  the top club; any two clubs head to head; or one club against the average of up to five. Judge clubs
+  on their first-team XI, the best XI at the whole club, or their top 18.
 - **Your own columns:** add any stat, attribute, hidden attribute or personality trait as a column to the
   player, squad, signings and growth tables, sort by it, and drag column headers to reorder them.
 - **Right-click to copy** a player's name, ready to paste into FM's search.
@@ -32,12 +41,10 @@ hidden attributes and potential, and plan your squad.
   and a **development outlook** for young players: the ability they're likely to reach, not just their potential.
 - **Player profiles:** all attributes with FM-style colours, hidden attributes, personality, positions
   on a pitch, best roles and star ratings.
-- **Squad builder:** pick your club (men's or women's side) and a formation, or build your own with any
-  position and IP/OOP role. It shows where your squad is thin, old or out of contract, and lists signings
-  that would improve each position within your budget. **My squad** lists everyone at your club with
-  their place in your XI, and **Timeline** shows the XI over the next three seasons as contracts end
-  and players age. First team, youth and reserve teams can be viewed separately.
-- **Staff recommendations:** your weakest coaching, scouting and medical areas, with affordable upgrades.
+- **Squad planning:** where your squad is thin, old or out of contract, signings within your budget, and
+  the XI over the next three seasons as contracts end and players age.
+- **Staff recommendations:** your weakest coaching, scouting and medical areas, with affordable upgrades
+  from people whose job fits the area and who'd plausibly join (board members and unpaid roles left out).
 - **Player interest estimate:** how keen each player is likely to be to join your club, graded
   Interested, Persuadable, Doubtful or Unlikely.
 - **Growth & regens:** compare scans over time to find the biggest risers and newly generated players.
@@ -98,7 +105,7 @@ Load your save → open Pitchside → press **Scan** (⌘R). A scan takes a few 
 you want fresh data, for example after a transfer window or youth intake. Each scan is kept, which is
 what powers the Growth & regens screen.
 
-To use the squad builder, open **Squad builder** and type your club's name. The interest estimate in the
+To plan your squad and tactics, open **Tactics & squad** and type your club's name. The interest estimate in the
 player profile and the Players list also uses this club.
 
 ## Updating
@@ -143,6 +150,9 @@ Patches can move data around in memory. If a scan finds very few players, or val
 - The in-game date is worked out from the most recent contract signing in the database, so it can be
   a day or two behind. It's shown in the status bar; the season can be set by hand in Settings.
 - Players out on loan still count towards their parent club's team.
+- First team / U21 / U18 need a scan from plugin 0.4.1 or newer; with older scans the first team is
+  estimated as the best 30 and youth teams go by age.
+- A club's league is the division most of its players are registered in.
 - **Tactics advice comes from attributes only.** It doesn't know your opponents, your players' morale or
   how they've been playing, so treat it as a starting point and adjust in-game.
 - Out of Possession roles are scored on their key attributes only (FM's role cards list up to eight and

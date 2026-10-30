@@ -233,7 +233,7 @@ public enum Formations {
         ]),
         Formation(name: "5-2-1-2", slots: back3 + [
             Slot("LWB", "WBL", "WB", "oHWB"), Slot("RWB", "WBR", "WB", "oHWB"), Slot("LCM", "MC", "CM", "oSCM"),
-            Slot("RCM", "MC", "B2B", "oPCM"), Slot("AM", "AMC", "AP", "oTAM"), Slot("LST", "ST", "CF", "oCF"),
+            Slot("RCM", "MC", "CHM", "oPCM"), Slot("AM", "AMC", "AP", "oTAM"), Slot("LST", "ST", "CF", "oCF"),
             Slot("RST", "ST", "CHF", "oCOCF"),
         ]),
         Formation(name: "5-4-1", slots: back3 + [
@@ -243,7 +243,7 @@ public enum Formations {
         ]),
         Formation(name: "5-2-3", slots: back3 + [
             Slot("LWB", "WBL", "WB", "oHWB"), Slot("RWB", "WBR", "WB", "oHWB"), Slot("LCM", "MC", "CM", "oSCM"),
-            Slot("RCM", "MC", "B2B", "oPCM"), Slot("LW", "AML", "IF", "oIOW"), Slot("RW", "AMR", "IF", "oIOW"),
+            Slot("RCM", "MC", "CHM", "oPCM"), Slot("LW", "AML", "IF", "oIOW"), Slot("RW", "AMR", "IF", "oIOW"),
             Slot("ST", "ST", "CF", "oCF"),
         ]),
     ]

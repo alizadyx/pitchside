@@ -18,6 +18,9 @@ public enum TacticsAdvisor {
         public let familiarity: UInt8
         /// Next-best IP roles for this player here, for a quick alternative.
         public let alternatives: [(code: String, score: Double)]
+        /// When roles were kept as you set them: a clearly better IP / OOP role for this player here.
+        public var betterIP: (code: String, score: Double)? = nil
+        public var betterOOP: (code: String, score: Double)? = nil
     }
 
     public struct FormationFit: Sendable, Identifiable {
@@ -65,7 +68,10 @@ public enum TacticsAdvisor {
     }
 
     /// Picks the XI for a formation: every player in his best IP/OOP roles, the best possible combination.
-    public static func fit(_ formation: Formation, squad: [PlayerRow], meta: ExportMeta) -> FormationFit {
+    /// With `keepRoles`, every slot keeps the IP/OOP roles you set and players are judged in those roles
+    /// (better roles are only pointed out); otherwise each player gets his best roles.
+    public static func fit(_ formation: Formation, squad: [PlayerRow], meta: ExportMeta,
+                           keepRoles: Bool = false) -> FormationFit {
         let posIndex = Dictionary(uniqueKeysWithValues: meta.positionKeys.enumerated().map { ($1, $0) })
         let slots = formation.slots
         let n = slots.count
@@ -77,7 +83,7 @@ public enum TacticsAdvisor {
                 let f = SquadBuilder.familiarity(r, posIndex[slot.position])
                 fam[s][p] = f
                 guard let pen = familiarityPenalty(f) else { continue }
-                value[s][p] = bestRoles(r, at: slot.position).blended - pen
+                value[s][p] = (keepRoles ? SquadBuilder.slotScore(r, slot) : bestRoles(r, at: slot.position).blended) - pen
             }
         }
         // Best possible XI: maximum-weight assignment of players to slots (Hungarian method).
@@ -100,6 +106,22 @@ public enum TacticsAdvisor {
                 continue
             }
             let r = squad[p]
+            let pen = familiarityPenalty(fam[s][p]) ?? 0
+            if keepRoles {
+                let ri = Roles.index(slot.role), oi = Roles.index(slot.oop)
+                let ipS = ri.map { r.roleScores[$0] } ?? 0, oopS = oi.map { r.roleScores[$0] } ?? 0
+                let best = bestRoles(r, at: slot.position)
+                var pick = Pick(slot: slot, player: r, ipScore: ipS, oopScore: oopS,
+                                score: SquadBuilder.slotScore(r, slot) - pen, familiarity: fam[s][p], alternatives: [])
+                if let b = best.ip, best.ipScore >= ipS + 0.5, Roles.all[b].code != slot.role {
+                    pick.betterIP = (Roles.all[b].code, best.ipScore)
+                }
+                if let b = best.oop, best.oopScore >= oopS + 0.5, Roles.all[b].code != slot.oop {
+                    pick.betterOOP = (Roles.all[b].code, best.oopScore)
+                }
+                bySlot[s] = pick
+                continue
+            }
             var excluded = takenSpecial
             if playmakerCount >= 2 { excluded.formUnion(playmakers) }
             var c = bestRoles(r, at: slot.position, excludingIP: excluded)
@@ -116,7 +138,6 @@ public enum TacticsAdvisor {
                     return (role.code, r.roleScores[i])
                 }
                 .sorted { $0.1 > $1.1 }.prefix(2)
-            let pen = familiarityPenalty(fam[s][p]) ?? 0
             bySlot[s] = Pick(slot: newSlots[s], player: r, ipScore: c.ipScore, oopScore: c.oopScore,
                              score: c.blended - pen, familiarity: fam[s][p], alternatives: alts.map { (code: $0.0, score: $0.1) })
         }
@@ -134,7 +155,9 @@ public enum TacticsAdvisor {
         let level = filled.isEmpty ? 0 : filled.map(\.score).reduce(0, +) / Double(n)
         let depth = depthScores.isEmpty ? 0 : depthScores.reduce(0, +) / Double(depthScores.count)
         let oop = picks.filter { $0.player != nil && $0.familiarity < 15 }.count
-        return FormationFit(formation: Formation(name: formation.name, slots: newSlots), picks: picks,
+        var shaped = formation
+        shaped.slots = newSlots
+        return FormationFit(formation: shaped, picks: picks,
                             bench: Array(bench), level: level, depth: depth, outOfPosition: oop)
     }
 
@@ -414,6 +437,50 @@ public enum TacticsAdvisor {
         return P
     }
 
+    // MARK: Instruction catalogue (FM27 names, from the game's tactic code)
+
+    public struct InstructionSpec: Sendable, Identifiable {
+        public var id: String { name }
+        public let phase: String
+        public let name: String
+        public let options: [String]
+    }
+
+    public static let mentalities = ["Very Defensive", "Defensive", "Cautious", "Balanced", "Positive", "Attacking", "Very Attacking"]
+    public static let tacticalStyles = ["Control Possession", "Gegenpress", "Tiki-Taka", "Vertical Tiki-Taka", "Wing Play",
+                                        "Route One", "Fluid Counter-Attack", "Direct Counter-Attack", "Catenaccio",
+                                        "Park the Bus", "Blank Slate"]
+
+    public static let catalogue: [InstructionSpec] = [
+        InstructionSpec(phase: "In possession", name: "Passing Directness", options: ["Much Shorter", "Shorter", "More Direct", "Much More Direct"]),
+        InstructionSpec(phase: "In possession", name: "Tempo", options: ["Much Lower", "Lower", "Higher", "Much Higher"]),
+        InstructionSpec(phase: "In possession", name: "Team Width", options: ["Much Narrower", "Narrower", "Wider", "Much Wider"]),
+        InstructionSpec(phase: "In possession", name: "Attacking Transition", options: ["Counter", "Hold Shape"]),
+        InstructionSpec(phase: "In possession", name: "Creative Freedom", options: ["Be More Expressive", "Be More Disciplined"]),
+        InstructionSpec(phase: "In possession", name: "Build-Up Strategy", options: ["Play Through Press", "Bypass Press"]),
+        InstructionSpec(phase: "In possession", name: "Progress Through", options: ["Focus Play Down The Left", "Focus Play Down The Right", "Focus Play Down The Middle", "Focus Play Down Both Flanks"]),
+        InstructionSpec(phase: "In possession", name: "Pass Reception", options: ["Into Space", "Into Feet"]),
+        InstructionSpec(phase: "In possession", name: "Dribbling", options: ["Run At Defence", "Dribble Less"]),
+        InstructionSpec(phase: "In possession", name: "Supporting Runs", options: ["Look For Overlap", "Look For Underlap"]),
+        InstructionSpec(phase: "In possession", name: "Crossing Style", options: ["Low Crosses", "Floated Crosses", "Whipped Crosses"]),
+        InstructionSpec(phase: "In possession", name: "Shots From Distance", options: ["Shoot On Sight", "Stay Patient"]),
+        InstructionSpec(phase: "In possession", name: "Patience", options: ["Work Ball Into Box", "Hit Early Crosses"]),
+        InstructionSpec(phase: "In possession", name: "Time Wasting", options: ["Less Often", "More Often"]),
+        InstructionSpec(phase: "Goalkeeper", name: "Goal Kicks", options: ["Short", "Long"]),
+        InstructionSpec(phase: "Goalkeeper", name: "Distribute To", options: ["Centre-Backs", "Full-Backs", "Flanks", "Playmaker", "Target Forward", "Over Opposition Defence"]),
+        InstructionSpec(phase: "Goalkeeper", name: "Distribution Speed", options: ["Slow", "Quick"]),
+        InstructionSpec(phase: "Out of possession", name: "Line Of Engagement", options: ["High", "Mid", "Low"]),
+        InstructionSpec(phase: "Out of possession", name: "Defensive Line", options: ["Much Higher", "Higher", "Deeper", "Much Deeper"]),
+        InstructionSpec(phase: "Out of possession", name: "Defensive Line Behaviour", options: ["Hold Line", "Drop Off"]),
+        InstructionSpec(phase: "Out of possession", name: "Pressing Intensity", options: ["Much Lower", "Lower", "Higher", "Much Higher"]),
+        InstructionSpec(phase: "Out of possession", name: "Defensive Transition", options: ["Counter-Press", "Regroup"]),
+        InstructionSpec(phase: "Out of possession", name: "Tackling", options: ["Get Stuck In", "Stay On Feet"]),
+        InstructionSpec(phase: "Out of possession", name: "Pressing Trap", options: ["Trap Inside", "Trap Outside"]),
+        InstructionSpec(phase: "Out of possession", name: "Cross Engagement", options: ["Stop Crosses", "Invite Crosses"]),
+        InstructionSpec(phase: "Out of possession", name: "Prevent Short GK Distribution", options: ["On"]),
+        InstructionSpec(phase: "Set pieces", name: "Play For Set Pieces", options: ["On"]),
+    ]
+
     public static func instructions(_ fit: FormationFit, meta: ExportMeta, stance: Stance) -> Instructions {
         let P = profile(fit, meta: meta)
         let b = P.base
@@ -456,7 +523,10 @@ public enum TacticsAdvisor {
         }
         let ls = P.longShots - b
         if ls >= 1.5 { add(ip, "Shots From Distance", "Shoot On Sight", vs("Midfield & attack long shots", P.longShots), ls) }
-        else if ls <= -1 { add(ip, "Shots From Distance", "Work Ball Into Box", vs("Long shots", P.longShots), ls) }
+        else if ls <= -1 {
+            add(ip, "Shots From Distance", "Stay Patient", vs("Long shots", P.longShots), ls)
+            add(ip, "Patience", "Work Ball Into Box", "Poor shooters from range (\(f(P.longShots))) — get closer before shooting", ls)
+        }
         let cbp = P.cbPlaying - b
         if cbp >= 0.5 && P.gkDistribution >= max(11, b - 1) { add(ip, "Build-Up Strategy", "Play Through Press", "Centre-backs on the ball \(f(P.cbPlaying)), keeper distribution \(f(P.gkDistribution))", cbp + 1) }
         else if cbp <= -1 { add(ip, "Build-Up Strategy", "Bypass Press", "Centre-backs are uncomfortable on the ball (\(f(P.cbPlaying)))", cbp) }

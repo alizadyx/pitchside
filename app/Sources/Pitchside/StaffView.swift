@@ -43,7 +43,7 @@ struct StaffView: View {
                     }
                     .frame(maxWidth: 240)
                 } else {
-                    Text(store.myClub.isEmpty ? "Pick your club in Squad builder first" : "Upgrades for \(store.myClub), weakest area first")
+                    Text(store.myClub.isEmpty ? "Pick your club in Tactics & squad first" : "Upgrades for \(store.myClub), weakest area first")
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
@@ -223,7 +223,7 @@ struct StaffAdviceView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 if store.myClub.isEmpty {
-                    Text("Type your club in Squad builder, then come back here.").foregroundStyle(.secondary)
+                    Text("Type your club in Tactics & squad, then come back here.").foregroundStyle(.secondary)
                 } else if store.staffAdvice.isEmpty {
                     Text("No staff data yet. Scan the game first.").foregroundStyle(.secondary)
                 } else {
@@ -236,7 +236,7 @@ struct StaffAdviceView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     if store.wageBudget > 0 {
-                        Text("Only staff within your wage budget of \(store.currency.symbol)\(store.wageBudget.formatted())/wk (set in Squad builder).")
+                        Text("Only staff within your wage budget of \(store.currency.symbol)\(store.wageBudget.formatted())/wk (set in Tactics & squad).")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 10, alignment: .top)], spacing: 10) {

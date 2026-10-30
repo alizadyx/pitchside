@@ -1,62 +1,12 @@
 import SwiftUI
 import PitchsideCore
 
-/// Smart tactics for your club: best formation and FM27 roles, set pieces & captain, team instructions.
-struct TacticsView: View {
-    @Environment(Store.self) private var store
-    @AppStorage("tacticsTab") private var tab = 0
-
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            if store.myClub.isEmpty || store.tacticsFits.isEmpty {
-                empty
-            } else {
-                switch tab {
-                case 1: SetPiecesPane()
-                case 2: InstructionsPane()
-                default: FormationsPane()
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "wand.and.stars").foregroundStyle(Theme.gold)
-            Text(store.myClub.isEmpty ? "Tactics" : store.myClub).font(.title3.bold())
-            if let fit = store.tacticsFit {
-                Text(fit.formation.name).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Picker("", selection: $tab) {
-                Text("Formation & roles").tag(0)
-                Text("Set pieces & captain").tag(1)
-                Text("Team instructions").tag(2)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 470)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-    }
-
-    private var empty: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "sportscourt").font(.system(size: 40)).foregroundStyle(.secondary)
-            Text("Pick your club in the Squad builder first").font(.headline)
-            Text("Tactics uses the same club and team (first team, U21…) as the Squad builder.")
-                .foregroundStyle(.secondary)
-            if store.allPlayers.isEmpty { Text("Scan the game first.").foregroundStyle(.orange) }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 // MARK: - Formation & roles
 
-private struct FormationsPane: View {
+/// The shapes that suit your squad best, each with the best IP/OOP role per player.
+struct FormationsPane: View {
     @Environment(Store.self) private var store
+    var onUse: () -> Void = {}
 
     var body: some View {
         HSplitView {
@@ -114,11 +64,12 @@ private struct FormationsPane: View {
             VStack(alignment: .leading, spacing: 6) {
                 Button {
                     store.useFormation(fit.formation)
+                    onUse()
                 } label: {
-                    Label("Use in Squad builder", systemImage: "arrow.right.circle.fill")
+                    Label("Use as my tactic", systemImage: "arrow.right.circle.fill")
                 }
-                .help("Loads this shape with these IP/OOP roles into the Squad builder")
-                Text("Roles are scored like FM27's role stars: key attributes, then preferable ones. A slot blends 60% IP and 40% OOP.")
+                .help("Copies this shape and these IP/OOP roles into My tactic, where you can change anything")
+                Text("Roles are scored like FM27's role stars: key attributes, then preferable ones, a little for the rest. A position blends 60% IP and 40% OOP.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: 260, alignment: .leading)
@@ -229,15 +180,18 @@ private struct TacticsPitch: View {
 
 // MARK: - Set pieces & captain
 
-private struct SetPiecesPane: View {
+struct SetPiecesPane: View {
     @Environment(Store.self) private var store
 
     var body: some View {
         ScrollView {
             if let sp = store.tacticsSetPieces {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("From the \(store.tacticsFit?.formation.name ?? "") XI (penalties also look at the bench). Set these in FM under Tactics → Set Pieces.")
-                        .font(.callout).foregroundStyle(.secondary)
+                    HStack {
+                        SourcePicker()
+                        Text("Penalties also look at the bench. Set these in FM under Tactics → Set Pieces.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 330), spacing: 12, alignment: .top)], spacing: 12) {
                         card("Captain", "person.badge.shield.checkmark.fill", sp.captains, ["Captain", "Vice-captain", "Third"])
                         card("Penalties", "target", sp.penalties, ["1st", "2nd", "3rd", "4th", "5th"])
@@ -282,7 +236,19 @@ private struct SetPiecesPane: View {
 
 // MARK: - Team instructions
 
-private struct InstructionsPane: View {
+/// Which XI set pieces and instructions are worked out for: your tactic, or the suggested shape.
+struct SourcePicker: View {
+    @Environment(Store.self) private var store
+    var body: some View {
+        Picker("Based on", selection: Binding(get: { store.tacticsSource }, set: { store.tacticsSource = $0 })) {
+            Text("My tactic (\(store.workingFormation.name))").tag(0)
+            Text("Suggested (\(store.tacticsFit?.formation.name ?? "best"))").tag(1)
+        }
+        .fixedSize()
+    }
+}
+
+struct InstructionsPane: View {
     @Environment(Store.self) private var store
     static let phases = ["In possession", "Out of possession", "Goalkeeper", "Set pieces"]
 
@@ -292,29 +258,23 @@ private struct InstructionsPane: View {
             if let ins = store.tacticsInstructions {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
+                        SourcePicker()
                         Picker("Going into games", selection: $store.tacticsStance) {
                             ForEach(TacticsAdvisor.Stance.allCases) { Text($0.title).tag($0.rawValue) }
                         }
-                        .frame(width: 320)
+                        .fixedSize()
                         Spacer()
-                        Text("For the \(store.tacticsFit?.formation.name ?? "") XI").foregroundStyle(.secondary)
+                        Button {
+                            store.applySuggestedInstructions()
+                        } label: { Label("Use all suggestions", systemImage: "wand.and.stars") }
+                        .help("Copies the suggested mentality, style and instructions into your tactic")
                     }
                     HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("MENTALITY").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            Text(ins.mentality).font(.title2.bold()).foregroundStyle(Theme.gold)
-                            Text(ins.mentalityReason).font(.callout).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(width: 230, alignment: .leading)
-                        .fmCard()
+                        mentalityCard(ins)
                         styles(ins.styles)
                     }
-                    ForEach(Self.phases, id: \.self) { phase in
-                        let items = ins.items.filter { $0.phase == phase }
-                        if !items.isEmpty { section(phase, items) }
-                    }
-                    Text("Only instructions with a clear reason in your squad are listed; leave the rest on FM's default. Names follow FM27's tactic screens; the exact wording in-game may differ slightly.")
+                    ForEach(Self.phases, id: \.self) { phase in section(phase, ins) }
+                    Text("“Suggested” only appears where your squad gives a clear reason; leave the rest on FM's default. Your choices are saved with your tactic. Names follow FM27's tactic screens; the wording in-game may differ slightly.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(14)
@@ -322,10 +282,33 @@ private struct InstructionsPane: View {
         }
     }
 
+    private func mentalityCard(_ ins: TacticsAdvisor.Instructions) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("MENTALITY").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text("Suggested").font(.caption).foregroundStyle(.secondary)
+                Text(ins.mentality).font(.title3.bold()).foregroundStyle(Theme.gold)
+            }
+            Text(ins.mentalityReason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Picker("Yours", selection: Binding(get: { store.workingFormation.mentality ?? "" },
+                                               set: { store.setMentality($0.isEmpty ? nil : $0) })) {
+                Text("Not set").tag("")
+                ForEach(TacticsAdvisor.mentalities, id: \.self) { Text($0).tag($0) }
+            }
+            Picker("Style", selection: Binding(get: { store.workingFormation.style ?? "" },
+                                               set: { store.setStyle($0.isEmpty ? nil : $0) })) {
+                Text("Not set").tag("")
+                ForEach(TacticsAdvisor.tacticalStyles, id: \.self) { Text($0).tag($0) }
+            }
+        }
+        .frame(width: 260, alignment: .leading)
+        .fmCard()
+    }
+
     private func styles(_ s: [TacticsAdvisor.StyleFit]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("TACTICAL STYLE FIT").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            ForEach(Array(s.prefix(5).enumerated()), id: \.element.id) { i, st in
+            ForEach(Array(s.prefix(6).enumerated()), id: \.element.id) { i, st in
                 HStack(spacing: 8) {
                     Text(st.name).font(.callout.weight(i == 0 ? .bold : .regular)).frame(width: 170, alignment: .leading)
                     ProgressView(value: st.fit, total: 100).tint(i == 0 ? Theme.gold : .accentColor).frame(width: 110)
@@ -338,17 +321,45 @@ private struct InstructionsPane: View {
         .fmCard()
     }
 
-    private func section(_ title: String, _ items: [TacticsAdvisor.Instruction]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            ForEach(items) { it in
+    private func section(_ title: String, _ ins: TacticsAdvisor.Instructions) -> some View {
+        let specs = TacticsAdvisor.catalogue.filter { $0.phase == title }
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .frame(width: 210, alignment: .leading)
+                Text("SUGGESTED").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(width: 200, alignment: .leading)
+                Text("YOURS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(width: 200, alignment: .leading)
+                Text("WHY").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            ForEach(specs) { spec in
+                let sug = ins.items.first { $0.name == spec.name }
+                let mine = store.workingFormation.instructions?[spec.name]
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(it.name).font(.callout).frame(width: 200, alignment: .leading)
-                    Text(it.setting).font(.callout.bold())
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background((it.strength > 0.6 ? Theme.gold : Color.accentColor).opacity(0.22), in: Capsule())
-                        .frame(width: 210, alignment: .leading)
-                    Text(it.reason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(spec.name).font(.callout).frame(width: 200, alignment: .leading)
+                    Group {
+                        if let sug {
+                            Text(sug.setting).font(.callout.bold())
+                                .padding(.horizontal, 8).padding(.vertical, 2)
+                                .background((sug.strength > 0.6 ? Theme.gold : Color.accentColor).opacity(0.22), in: Capsule())
+                        } else {
+                            Text("Default").font(.callout).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 200, alignment: .leading)
+                    Picker(spec.name, selection: Binding(get: { mine ?? "" },
+                                                         set: { store.setInstruction(spec.name, $0.isEmpty ? nil : $0) })) {
+                        Text("Default").tag("")
+                        ForEach(spec.options, id: \.self) { Text($0).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 200, alignment: .leading)
+                    .overlay(alignment: .trailing) {
+                        if let sug, let mine, mine != sug.setting {
+                            Image(systemName: "exclamationmark.circle").foregroundStyle(.orange).offset(x: 16)
+                                .help("Differs from the suggestion")
+                        }
+                    }
+                    Text(sug?.reason ?? "").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
             }

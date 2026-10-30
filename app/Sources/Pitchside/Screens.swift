@@ -42,7 +42,8 @@ struct SquadView: View {
     @State private var picked: UInt32?
     @State private var showSave = false
     @State private var saveName = ""
-    @AppStorage("squadMode") private var mode = 0     // 0 plan on the pitch, 1 my squad list
+    /// 0 My tactic, 3 Suggested, 4 Set pieces & captain, 5 Team instructions, 1 My squad, 2 Timeline.
+    @AppStorage("squadMode") private var mode = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,6 +53,12 @@ struct SquadView: View {
                 MySquadView(picked: $picked)
             } else if store.squadReport != nil && mode == 2 {
                 SquadTimelineView(picked: $picked)
+            } else if store.squadReport != nil && mode == 3 {
+                FormationsPane(onUse: { mode = 0 })
+            } else if store.squadReport != nil && mode == 4 {
+                SetPiecesPane()
+            } else if store.squadReport != nil && mode == 5 {
+                InstructionsPane()
             } else if let report = store.squadReport {
                 HSplitView {
                     ScrollView {
@@ -104,14 +111,17 @@ struct SquadView: View {
                     }
                 }
                 Picker("View", selection: $mode) {
-                    Text("Plan").tag(0)
+                    Text("My tactic").tag(0)
+                    Text("Suggested").tag(3)
+                    Text("Set pieces").tag(4)
+                    Text("Instructions").tag(5)
                     Text("My squad").tag(1)
                     Text("Timeline").tag(2)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help("Plan: formation, weak spots and signings. My squad: everyone in the list. Timeline: the next three seasons.")
+                .help("My tactic: your formation and roles, how your squad fits and who to sign. Suggested: the shapes that suit your squad best. Set pieces & captain, team instructions, everyone at the club, and the next three seasons.")
                 if store.clubTeams.count > 1 {
                     Picker("Squad", selection: $store.squadTeamRank) {
                         ForEach(store.clubTeams) { t in Text("\(t.label) (\(t.count))").tag(t.rank) }
@@ -182,9 +192,13 @@ struct SquadView: View {
     private var tacticControls: some View {
         HStack(spacing: 6) {
             Picker("Tactic", selection: Binding(get: { store.formationName }, set: { store.loadFormation($0) })) {
-                SwiftUI.Section("Presets") {
+                SwiftUI.Section("Common shapes") {
                     ForEach(Formations.all) { Text($0.name).tag($0.name) }
                 }
+                SwiftUI.Section("More shapes") {
+                    ForEach(Formations.more) { Text($0.name).tag($0.name) }
+                }
+                Text("Blank pitch (build from scratch)").tag(Formations.blank.name)
                 if !store.customFormations.isEmpty {
                     SwiftUI.Section("My tactics") {
                         ForEach(store.customFormations) { Text($0.name).tag($0.name) }
@@ -200,6 +214,7 @@ struct SquadView: View {
                     .foregroundStyle(Theme.accent)
             }
             Menu {
+                Button("New tactic from a blank pitch") { store.newBlankTactic() }
                 Button("Save as new tactic…") {
                     saveName = store.isCustomFormation ? store.formationName : ""
                     showSave = true
@@ -285,6 +300,7 @@ struct SquadView: View {
                 ColumnsMenu(table: "signings")
             }
             .padding(10)
+            upgradesStrip
             Table(store.suggestions, selection: $picked, columnCustomization: $columnLayout) {
                 TableColumn("★") { s in
                     Button { store.toggleShortlist(s.row.id) } label: {
@@ -330,6 +346,50 @@ struct SquadView: View {
                 PlayerContextItems(ids: ids, store: store)
             }
         }
+    }
+}
+
+extension SquadView {
+    /// The single best signing for every position of your tactic, biggest gain first.
+    var upgradesStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Biggest upgrades").font(.callout.weight(.semibold))
+                Text("best signing per position, within your budget and willingness filters")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if store.upgradesBusy { ProgressView().controlSize(.small) }
+                Button(store.upgrades.isEmpty ? "Find" : "Refresh") { store.findUpgrades() }
+                    .controlSize(.small).disabled(store.upgradesBusy)
+            }
+            if !store.upgrades.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(store.upgrades.prefix(11)) { u in
+                            Button {
+                                store.selectedSlot = u.slot.label
+                                picked = u.suggestion.row.id
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Text(u.slot.label).font(.caption.weight(.bold))
+                                        Text(String(format: "+%.1f", u.suggestion.gain)).font(.caption.bold()).foregroundStyle(.green)
+                                    }
+                                    Text(u.suggestion.row.name).font(.callout).lineLimit(1)
+                                    Text(u.suggestion.row.club.isEmpty ? "Free agent" : u.suggestion.row.club)
+                                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .frame(width: 150, alignment: .leading)
+                                .background(Theme.panelAlt, in: RoundedRectangle(cornerRadius: 7))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10).padding(.bottom, 8)
     }
 }
 
@@ -527,8 +587,53 @@ struct SlotCard: View {
             if a.issues.isEmpty {
                 Label("Covered", systemImage: "checkmark.circle.fill").font(.callout).foregroundStyle(.green)
             }
+            if let r = a.starter, let i = store.slotIndex(a.slot.label) { roleCheck(r, i) }
+            if let report = store.squadReport, let meta = store.meta {
+                let opts = SquadBuilder.options(for: a.slot, squad: report.squad, meta: meta)
+                if !opts.isEmpty {
+                    Divider()
+                    Text("WHO CAN PLAY HERE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(opts) { o in
+                        HStack(spacing: 6) {
+                            Text(o.row.name).lineLimit(1)
+                            Text("\(o.row.age)").foregroundStyle(.secondary)
+                            if o.familiarity < 15 {
+                                Text("accomplished").font(.caption2).foregroundStyle(.orange)
+                                    .help("Can play here but isn't a natural (familiarity \(o.familiarity))")
+                            }
+                            Spacer()
+                            Text(String(format: "%.1f", o.score)).monospacedDigit()
+                                .foregroundStyle(AttrColor.color(Int(o.score.rounded())))
+                        }
+                        .font(.callout)
+                    }
+                }
+            }
         }
         .fmCard()
+    }
+
+    /// Points out when the starter would be clearly better in another role here, with a one-click switch.
+    @ViewBuilder private func roleCheck(_ r: PlayerRow, _ i: Int) -> some View {
+        let better = SquadBuilder.betterRoles(for: r, at: a.slot)
+        if let ip = better.ip, let role = Roles.role(ip.code) {
+            suggestion(r, "In possession", role.name, ip.score, current: a.slot.role) { store.setSlotRole(i, ip.code) }
+        }
+        if let oop = better.oop, let role = Roles.role(oop.code) {
+            suggestion(r, "Out of possession", role.name, oop.score, current: a.slot.oop) { store.setSlotOOP(i, oop.code) }
+        }
+    }
+
+    private func suggestion(_ r: PlayerRow, _ phase: String, _ name: String, _ score: Double, current: String,
+                            apply: @escaping () -> Void) -> some View {
+        let now = Roles.index(current).map { r.roleScores[$0] } ?? 0
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "lightbulb.fill").foregroundStyle(Theme.gold)
+            Text("\(r.person.lastName) scores \(String(format: "%.1f", score)) as \(name) (\(phase.lowercased())), \(String(format: "%.1f", now)) now.")
+                .font(.callout).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button("Switch", action: apply).controlSize(.small)
+        }
     }
 
     private func editor(_ i: Int) -> some View {

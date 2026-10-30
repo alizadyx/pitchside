@@ -35,6 +35,10 @@ public struct Formation: Sendable, Hashable, Identifiable, Codable {
     public var id: String { name }
     public var name: String
     public var slots: [Slot]
+    /// Your chosen mentality, tactical style and team instructions (FM27 names); nil/empty = not set.
+    public var mentality: String?
+    public var style: String?
+    public var instructions: [String: String]?
     public init(name: String, slots: [Slot]) { self.name = name; self.slots = slots }
 }
 
@@ -181,6 +185,74 @@ public enum Formations {
             Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "CHF", "oCOCF"),
         ]),
     ]
+
+    /// More FM27 shapes, kept separate so the common ones stay at the top of the list.
+    public static let more: [Formation] = [
+        Formation(name: "4-5-1", slots: back4 + [
+            Slot("LM", "ML", "WM", "oTWM"), Slot("LCM", "MC", "CM", "oSCM"), Slot("CM", "MC", "MP", "oCM"),
+            Slot("RCM", "MC", "CHM", "oPCM"), Slot("RM", "MR", "WM", "oTWM"), Slot("ST", "ST", "CF", "oCF"),
+        ]),
+        Formation(name: "4-2-4", slots: back4 + [
+            Slot("LCM", "MC", "CM", "oCM"), Slot("RCM", "MC", "MP", "oSCM"), Slot("LW", "AML", "W", "oW"),
+            Slot("RW", "AMR", "IF", "oW"), Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "P", "oCOCF"),
+        ]),
+        Formation(name: "4-2-2-2", slots: back4 + [
+            Slot("LDM", "DM", "DLP", "oDM"), Slot("RDM", "DM", "B2B", "oPDM"), Slot("LAM", "AMC", "AP", "oAM"),
+            Slot("RAM", "AMC", "SS", "oTAM"), Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "CHF", "oCOCF"),
+        ]),
+        Formation(name: "4-4-2 DM", slots: back4 + [
+            Slot("LDM", "DM", "DLP", "oDM"), Slot("RDM", "DM", "B2B", "oPDM"), Slot("LM", "ML", "W", "oWM"),
+            Slot("RM", "MR", "WM", "oTWM"), Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "TF", "oCOCF"),
+        ]),
+        Formation(name: "4-3-2-1", slots: back4 + [
+            Slot("LCM", "MC", "CHM", "oPCM"), Slot("CM", "MC", "CM", "oSCM"), Slot("RCM", "MC", "MP", "oCM"),
+            Slot("LAM", "AMC", "AP", "oAM"), Slot("RAM", "AMC", "SS", "oTAM"), Slot("ST", "ST", "CF", "oCF"),
+        ]),
+        Formation(name: "4-1-2-3", slots: back4 + [
+            Slot("DM", "DM", "HB", "oDDM"), Slot("LCM", "MC", "CHM", "oPCM"), Slot("RCM", "MC", "AP", "oCM"),
+            Slot("LW", "AML", "IF", "oTW"), Slot("RW", "AMR", "IF", "oW"), Slot("ST", "ST", "F9", "oCF"),
+        ]),
+        Formation(name: "4-2-1-3", slots: back4 + [
+            Slot("LDM", "DM", "DLP", "oDM"), Slot("RDM", "DM", "B2B", "oPDM"), Slot("AM", "AMC", "AP", "oAM"),
+            Slot("LW", "AML", "IF", "oW"), Slot("RW", "AMR", "WF", "oW"), Slot("ST", "ST", "CF", "oCF"),
+        ]),
+        Formation(name: "3-4-2-1", slots: back3 + [
+            Slot("LWB", "WBL", "WB", "oWB"), Slot("LCM", "MC", "CM", "oPCM"), Slot("RCM", "MC", "MP", "oSCM"),
+            Slot("RWB", "WBR", "AWB", "oWB"), Slot("LAM", "AMC", "AP", "oAM"), Slot("RAM", "AMC", "SS", "oTAM"),
+            Slot("ST", "ST", "CF", "oCF"),
+        ]),
+        Formation(name: "3-4-1-2", slots: back3 + [
+            Slot("LWB", "WBL", "WB", "oWB"), Slot("LCM", "MC", "CM", "oPCM"), Slot("RCM", "MC", "MP", "oSCM"),
+            Slot("RWB", "WBR", "WB", "oWB"), Slot("AM", "AMC", "AP", "oAM"), Slot("LST", "ST", "CF", "oCF"),
+            Slot("RST", "ST", "CHF", "oCOCF"),
+        ]),
+        Formation(name: "3-1-4-2", slots: back3 + [
+            Slot("DM", "DM", "DM", "oSDM"), Slot("LM", "ML", "WM", "oWM"), Slot("LCM", "MC", "CHM", "oPCM"),
+            Slot("RCM", "MC", "AP", "oCM"), Slot("RM", "MR", "WM", "oWM"), Slot("LST", "ST", "CF", "oCF"),
+            Slot("RST", "ST", "CHF", "oTCF"),
+        ]),
+        Formation(name: "5-2-1-2", slots: back3 + [
+            Slot("LWB", "WBL", "WB", "oHWB"), Slot("RWB", "WBR", "WB", "oHWB"), Slot("LCM", "MC", "CM", "oSCM"),
+            Slot("RCM", "MC", "B2B", "oPCM"), Slot("AM", "AMC", "AP", "oTAM"), Slot("LST", "ST", "CF", "oCF"),
+            Slot("RST", "ST", "CHF", "oCOCF"),
+        ]),
+        Formation(name: "5-4-1", slots: back3 + [
+            Slot("LWB", "WBL", "WB", "oHWB"), Slot("RWB", "WBR", "WB", "oHWB"), Slot("LM", "ML", "WM", "oTWM"),
+            Slot("LCM", "MC", "CM", "oSCM"), Slot("RCM", "MC", "MP", "oCM"), Slot("RM", "MR", "WM", "oTWM"),
+            Slot("ST", "ST", "TF", "oCOCF"),
+        ]),
+        Formation(name: "5-2-3", slots: back3 + [
+            Slot("LWB", "WBL", "WB", "oHWB"), Slot("RWB", "WBR", "WB", "oHWB"), Slot("LCM", "MC", "CM", "oSCM"),
+            Slot("RCM", "MC", "B2B", "oPCM"), Slot("LW", "AML", "IF", "oIOW"), Slot("RW", "AMR", "IF", "oIOW"),
+            Slot("ST", "ST", "CF", "oCF"),
+        ]),
+    ]
+
+    /// Every preset: the common shapes, then the rest.
+    public static var presets: [Formation] { all + more }
+
+    /// A blank pitch with just a goalkeeper, for building a shape from scratch.
+    public static let blank = Formation(name: "Blank", slots: [Slot("GK", "GK", "GK", "oGK")])
 
     static let back4: [Slot] = [
         Slot("GK", "GK", "GK", "oGK"), Slot("LB", "DL", "FB", "oFB"), Slot("LCB", "DC", "BPCB", "oCB"),
@@ -359,5 +431,56 @@ public enum SquadBuilder {
             return (x.row.person.val ?? Int.max) < (y.row.person.val ?? Int.max)
         }
         return Array(out.prefix(limit))
+    }
+
+    // MARK: My tactic helpers
+
+    public struct Option: Sendable, Identifiable {
+        public var id: UInt32 { row.id }
+        public let row: PlayerRow
+        public let score: Double
+        public let familiarity: UInt8
+    }
+
+    /// Everyone at the club who could play a slot (natural or accomplished there), best first, in its roles.
+    public static func options(for slot: Slot, squad: [PlayerRow], meta: ExportMeta, limit: Int = 8) -> [Option] {
+        let pi = meta.positionKeys.firstIndex(of: slot.position)
+        return squad.compactMap { r -> Option? in
+            let f = familiarity(r, pi)
+            guard f >= 12 else { return nil }
+            return Option(row: r, score: slotScore(r, slot), familiarity: f)
+        }
+        .sorted { a, b in a.score != b.score ? a.score > b.score : a.familiarity > b.familiarity }
+        .prefix(limit).map { $0 }
+    }
+
+    /// A player's clearly better roles at a slot (0.5 or more above the roles set there), if any.
+    public static func betterRoles(for r: PlayerRow, at slot: Slot) -> (ip: (code: String, score: Double)?, oop: (code: String, score: Double)?) {
+        func best(_ roles: [Role], current: String) -> (code: String, score: Double)? {
+            let now = Roles.index(current).map { r.roleScores[$0] } ?? 0
+            guard let top = roles.compactMap({ role in Roles.index(role.code).map { (role.code, r.roleScores[$0]) } })
+                    .max(by: { $0.1 < $1.1 }), top.0 != current, top.1 >= now + 0.5 else { return nil }
+            return (top.0, top.1)
+        }
+        return (best(Formations.roles(for: slot.position), current: slot.role),
+                best(Formations.oopRoles(for: slot.position), current: slot.oop))
+    }
+
+    public struct Upgrade: Sendable, Identifiable {
+        public var id: String { slot.label + "-\(suggestion.row.id)" }
+        public let slot: Slot
+        public let current: Double
+        public let suggestion: Suggestion
+    }
+
+    /// The best signing for every position of your tactic, biggest improvement first.
+    public static func biggestUpgrades(report: SquadReport, rows: [PlayerRow], meta: ExportMeta, criteria: SigningCriteria,
+                                       interest: InterestModel? = nil, season: Int = 0) -> [Upgrade] {
+        report.slots.compactMap { a -> Upgrade? in
+            guard let best = suggestions(for: a, report: report, rows: rows, meta: meta, criteria: criteria,
+                                         interest: interest, season: season, limit: 1).first else { return nil }
+            return Upgrade(slot: a.slot, current: criteria.forDepth ? a.backupScore : a.starterScore, suggestion: best)
+        }
+        .sorted { $0.suggestion.gain > $1.suggestion.gain }
     }
 }

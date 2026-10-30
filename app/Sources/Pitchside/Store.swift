@@ -149,6 +149,16 @@ final class Store {
     var tacticsFit: TacticsAdvisor.FormationFit? {
         tacticsFits.first { $0.formation.name == tacticsChoice } ?? tacticsFits.first
     }
+    /// Your own tactic fitted to the squad, keeping the roles you chose.
+    private(set) var myTacticFit: TacticsAdvisor.FormationFit?
+    /// Set pieces and instructions follow: 0 = my tactic, 1 = the suggested shape picked in Suggested.
+    var tacticsSource: Int = UserDefaults.standard.object(forKey: "tacticsSource") as? Int ?? 0 {
+        didSet { UserDefaults.standard.set(tacticsSource, forKey: "tacticsSource"); refreshTacticsDetail() }
+    }
+    var detailFit: TacticsAdvisor.FormationFit? { tacticsSource == 0 ? (myTacticFit ?? tacticsFit) : tacticsFit }
+    /// Best signing per position of your tactic (computed on request).
+    private(set) var upgrades: [SquadBuilder.Upgrade] = []
+    private(set) var upgradesBusy = false
     var suggestions: [SquadBuilder.Suggestion] = []
     var clubs: [String] = []
     var nations: [String] = []
@@ -535,7 +545,7 @@ final class Store {
     // MARK: - Squad builder
 
     var formation: Formation { workingFormation }
-    var allFormations: [Formation] { Formations.all + customFormations }
+    var allFormations: [Formation] { Formations.presets + [Formations.blank] + customFormations }
     var isCustomFormation: Bool { customFormations.contains { $0.name == formationName } }
 
     private var teamRows: [PlayerRow] { SquadBuilder.team(allPlayers, women: squadWomen) }
@@ -553,7 +563,7 @@ final class Store {
         if let f: Formation = loadJSON("workingFormation"), !f.slots.isEmpty { return f }
         let name = UserDefaults.standard.string(forKey: "formation") ?? "4-3-3"
         let custom: [Formation] = loadJSON("customFormations") ?? []
-        return (Formations.all + custom).first { $0.name == name } ?? Formations.all[0]
+        return (Formations.presets + custom).first { $0.name == name } ?? Formations.all[0]
     }
 
     /// Picks a club and switches to its men's or women's side when it only has one.
@@ -601,9 +611,63 @@ final class Store {
 
     /// Takes a formation (with its roles) from the tactics advisor into the squad builder.
     func useFormation(_ f: Formation) {
+        var f = f
+        if f.mentality == nil && f.style == nil && (f.instructions ?? [:]).isEmpty {   // keep your settings
+            f.mentality = workingFormation.mentality; f.style = workingFormation.style
+            f.instructions = workingFormation.instructions
+        }
         formationName = f.name
         formationEdited = true
         workingFormation = f
+    }
+
+    func newBlankTactic() {
+        formationName = Formations.blank.name
+        formationEdited = true
+        workingFormation = Formations.blank
+    }
+
+    func setInstruction(_ name: String, _ value: String?) {
+        var f = workingFormation
+        var ins = f.instructions ?? [:]
+        ins[name] = value
+        f.instructions = ins
+        formationEdited = true
+        workingFormation = f
+    }
+
+    func setMentality(_ m: String?) { var f = workingFormation; f.mentality = m; formationEdited = true; workingFormation = f }
+    func setStyle(_ st: String?) { var f = workingFormation; f.style = st; formationEdited = true; workingFormation = f }
+
+    /// Copies every suggested instruction (and the mentality and best-fitting style) into your tactic.
+    func applySuggestedInstructions() {
+        guard let ins = tacticsInstructions else { return }
+        var f = workingFormation
+        var d = f.instructions ?? [:]
+        for i in ins.items { d[i.name] = i.setting }
+        f.instructions = d
+        f.mentality = ins.mentality
+        f.style = ins.styles.first?.name
+        formationEdited = true
+        workingFormation = f
+    }
+
+    func findUpgrades() {
+        guard let meta, let report = squadReport, !upgradesBusy else { return }
+        var c = SigningCriteria()
+        c.maxValueGbp = transferBudget > 0 ? Int(Double(transferBudget) / max(rate, 0.0001)) : 0
+        c.maxWageGbp = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
+        c.minAge = signMinAge
+        c.maxAge = signMaxAge
+        c.minInterest = minInterest > 0 ? InterestLevel(rawValue: minInterest) : nil
+        c.forDepth = signForDepth
+        let rows = teamRows, model = interestModel, season = season
+        upgradesBusy = true
+        Task.detached(priority: .userInitiated) {
+            let u = SquadBuilder.biggestUpgrades(report: report, rows: rows, meta: meta, criteria: c,
+                                                 interest: model, season: season)
+            await MainActor.run { self.upgrades = u; self.upgradesBusy = false }
+        }
     }
 
     func addSlot(_ position: String) {
@@ -621,7 +685,7 @@ final class Store {
 
     func saveFormation(as name: String) {
         let name = name.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, !Formations.all.contains(where: { $0.name == name }) else { return }
+        guard !name.isEmpty, !Formations.presets.contains(where: { $0.name == name }), name != Formations.blank.name else { return }
         var f = workingFormation
         f.name = name
         customFormations.removeAll { $0.name == name }
@@ -638,7 +702,7 @@ final class Store {
     func refreshSquad() {
         guard let meta, !myClub.isEmpty, !allPlayers.isEmpty else {
             squadReport = nil; suggestions = []; clubTeams = []; squadTimeline = []
-            tacticsFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; return
+            tacticsFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; myTacticFit = nil; return
         }
         ensureInterestModel()
         let side = teamRows
@@ -665,13 +729,15 @@ final class Store {
         guard let meta, let report = squadReport else {
             tacticsFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; return
         }
-        let shapes = Formations.all + customFormations.filter { c in !Formations.all.contains { $0.name == c.name } }
+        let shapes = Formations.presets + customFormations.filter { c in !Formations.presets.contains { $0.name == c.name } }
         tacticsFits = TacticsAdvisor.rankFormations(shapes, squad: report.squad, meta: meta)
+        myTacticFit = TacticsAdvisor.fit(workingFormation, squad: report.squad, meta: meta, keepRoles: true)
+        upgrades = []
         refreshTacticsDetail()
     }
 
     private func refreshTacticsDetail() {
-        guard let meta, let fit = tacticsFit else { tacticsSetPieces = nil; tacticsInstructions = nil; return }
+        guard let meta, let fit = detailFit else { tacticsSetPieces = nil; tacticsInstructions = nil; return }
         tacticsSetPieces = TacticsAdvisor.setPieces(xi: fit.picks.compactMap(\.player), bench: fit.bench, meta: meta)
         tacticsInstructions = TacticsAdvisor.instructions(fit, meta: meta,
                                                           stance: TacticsAdvisor.Stance(rawValue: tacticsStance) ?? .even)

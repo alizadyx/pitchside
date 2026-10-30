@@ -392,6 +392,27 @@ struct PlayerDetail: View {
             .padding(12)
         }
         .background(Theme.bg)
+        // Actions live in the panel's part of the window toolbar: buttons placed at the top of the
+        // panel's scrolling content were hit-tested a toolbar-height off (clicking ✕ hit Compare).
+        .toolbar {
+            ToolbarItemGroup {
+                Button { store.copyText([p.n]) } label: { Label("Copy Name", systemImage: "doc.on.doc") }
+                    .help("Copy the name for FM's search")
+                Button { store.toggleCompare(row.id) } label: {
+                    Label("Compare", systemImage: store.compareIds.contains(row.id) ? "rectangle.split.3x1.fill" : "rectangle.split.3x1")
+                }
+                .help("Add to or remove from the comparison")
+                Button { store.toggleShortlist(row.id) } label: {
+                    Label("Shortlist", systemImage: store.shortlist.contains(row.id) ? "star.fill" : "star")
+                }
+                .help("Add to or remove from your shortlist")
+                if let onClose {
+                    Button(action: onClose) { Label("Close", systemImage: "xmark") }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Close (Esc)")
+                }
+            }
+        }
     }
 
     /// Red and green flags, plus how much of his potential a young player is likely to reach.
@@ -468,22 +489,6 @@ struct PlayerDetail: View {
                 Text(subtitle(p)).font(.callout).foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
-            VStack(spacing: 8) {
-                if let onClose { PanelCloseButton(action: onClose) }
-                Button { store.toggleShortlist(row.id) } label: {
-                    Image(systemName: row.shortlisted ? "star.fill" : "star").font(.title3)
-                        .foregroundStyle(row.shortlisted ? Theme.gold : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Shortlist")
-                Button { store.toggleCompare(row.id) } label: {
-                    Image(systemName: store.compareIds.contains(row.id) ? "rectangle.split.3x1.fill" : "rectangle.split.3x1")
-                        .font(.title3)
-                        .foregroundStyle(store.compareIds.contains(row.id) ? Theme.accent : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Add to comparison")
-            }
         }
         .fmCard()
     }

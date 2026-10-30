@@ -139,12 +139,8 @@ struct StaffDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .top) {
-                        Text(p.n).font(.title2.bold())
-                            .contextMenu { Button("Copy Name") { store.copyText([p.n]) } }
-                        Spacer(minLength: 4)
-                        if let onClose { PanelCloseButton(action: onClose) }
-                    }
+                    Text(p.n).font(.title2.bold())
+                        .contextMenu { Button("Copy Name") { store.copyText([p.n]) } }
                     Text([p.job, p.club].compactMap { $0 }.joined(separator: " · ")).foregroundStyle(.secondary)
                     Text("\(row.age) years · \(p.nat ?? "—")").foregroundStyle(.secondary)
                 }
@@ -163,6 +159,16 @@ struct StaffDetail: View {
                 }
             }
             .padding(14)
+        }
+        .toolbar {
+            ToolbarItemGroup {
+                Button { store.copyText([p.n]) } label: { Label("Copy Name", systemImage: "doc.on.doc") }
+                if let onClose {
+                    Button(action: onClose) { Label("Close", systemImage: "xmark") }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Close (Esc)")
+                }
+            }
         }
     }
 

@@ -162,16 +162,3 @@ struct SuggestionField: View {
         return Array((starts + contains).prefix(limit))
     }
 }
-
-/// Small close button for side panels (also closes with Esc).
-struct PanelCloseButton: View {
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.cancelAction)
-        .help("Close (Esc)")
-    }
-}

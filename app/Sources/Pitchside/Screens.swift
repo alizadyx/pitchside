@@ -299,14 +299,14 @@ struct SquadView: View {
                 }
                 .width(min: 90, ideal: 120, max: 170)
                 TableColumnForEach(store.columns(for: "signings")) { c in
-                    TableColumn(c.shortTitle) { s in StatCell(column: c, row: s.row) }
+                    TableColumn(c.shortTitle) { s in StatCell(column: c, row: s.row, store: store) }
                         .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
                 }
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
             .contextMenu(forSelectionType: UInt32.self) { ids in
-                PlayerContextItems(ids: ids)
+                PlayerContextItems(ids: ids, store: store)
             }
         }
     }
@@ -369,14 +369,14 @@ struct MySquadView: View {
                 }
                 .width(min: 54, ideal: 64, max: 80)
                 TableColumnForEach(store.columns(for: "squad")) { c in
-                    TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r) }
+                    TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r, store: store) }
                         .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
                 }
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
             .contextMenu(forSelectionType: UInt32.self) { ids in
-                PlayerContextItems(ids: ids)
+                PlayerContextItems(ids: ids, store: store)
             } primaryAction: { ids in
                 if let id = ids.first { picked = id }
             }
@@ -399,7 +399,7 @@ struct FormationPitch: View {
                         SlotMarker(a: a, selected: store.selectedSlot == a.slot.label)
                             .position(x: pt.x * geo.size.width, y: pt.y * geo.size.height)
                             .onTapGesture { store.selectedSlot = a.slot.label }
-                            .contextMenu { SlotMenu(label: a.slot.label) }
+                            .contextMenu { SlotMenu(label: a.slot.label, store: store) }
                     }
                 }
             }
@@ -446,7 +446,7 @@ struct SlotMarker: View {
 /// Right-click menu on a pitch position: move it, change its role or remove it.
 struct SlotMenu: View {
     let label: String
-    @Environment(Store.self) private var store
+    let store: Store
 
     var body: some View {
         if let i = store.slotIndex(label) {
@@ -627,14 +627,14 @@ struct RadarView: View {
                     }
                     .width(min: 36, ideal: 42, max: 50)
                     TableColumnForEach(store.columns(for: "growth")) { c in
-                        TableColumn(c.shortTitle) { r in StatCell(column: c, row: r) }
+                        TableColumn(c.shortTitle) { r in StatCell(column: c, row: r, store: store) }
                             .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
                     }
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: true))
                 .scrollContentBackground(.hidden)
                 .contextMenu(forSelectionType: UInt32.self) { ids in
-                    PlayerContextItems(ids: ids)
+                    PlayerContextItems(ids: ids, store: store)
                 }
             }
         }

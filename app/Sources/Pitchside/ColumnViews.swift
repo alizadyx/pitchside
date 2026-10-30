@@ -38,10 +38,12 @@ struct ColumnsMenu: View {
 }
 
 /// One cell of a user-added column.
+/// Gets the store passed in rather than from the environment: table cells and menus can be built
+/// outside the normal view tree, where the environment is empty.
 struct StatCell: View {
     let column: StatColumn
     let row: PlayerRow
-    @Environment(Store.self) private var store
+    let store: Store
 
     var body: some View {
         if column.isAttribute {
@@ -118,7 +120,7 @@ extension StatColumn {
 /// Right-click items shared by every player list.
 struct PlayerContextItems: View {
     let ids: Set<UInt32>
-    @Environment(Store.self) private var store
+    let store: Store
 
     var body: some View {
         Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyName(ids, lastOnly: false) }

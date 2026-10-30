@@ -151,7 +151,7 @@ struct PlayersTable: View {
             }
             .width(min: 56, ideal: 76, max: 100)
             TableColumnForEach(store.columns(for: "players")) { c in
-                TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r) }
+                TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r, store: store) }
                     .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
             }
         }
@@ -159,7 +159,7 @@ struct PlayersTable: View {
         .scrollContentBackground(.hidden)
         .background(Theme.bg)
         .contextMenu(forSelectionType: UInt32.self) { ids in
-            PlayerContextItems(ids: ids)
+            PlayerContextItems(ids: ids, store: store)
         } primaryAction: { ids in
             if let id = ids.first { selection = id }
         }

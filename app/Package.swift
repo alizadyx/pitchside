@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Pitchside",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS("14.4")],
     targets: [
         // Pure model/logic code — no UI imports, so it is unit-testable anywhere.
         .target(name: "PitchsideCore", path: "Sources/PitchsideCore"),

@@ -16,11 +16,15 @@ hidden attributes and potential, and plan your squad.
   attribute minimum, including hidden and personality ones ("Pace ≥ 15", "Consistency ≥ 14").
 - **Role ratings:** rank everyone by 23 tactical roles, or by a meta score weighted towards the
   attributes that matter most in FM's match engine.
+- **Your own columns:** add any stat, attribute, hidden attribute or personality trait as a column to the
+  player, squad, signings and growth tables, and sort by it.
+- **Right-click to copy** a player's name or surname, ready to paste into FM's search.
 - **Player profiles:** all attributes with FM-style colours, hidden attributes, personality, positions
   on a pitch, best roles and star ratings.
 - **Squad builder:** pick your club (men's or women's side) and a formation, or build your own with any
   position and role. It shows where your squad is thin, old or out of contract, and lists signings
-  that would improve each position within your budget.
+  that would improve each position within your budget. **My squad** lists everyone at your club with
+  their place in your XI.
 - **Player interest estimate:** how keen each player is likely to be to join your club, graded
   Interested, Persuadable, Doubtful or Unlikely.
 - **Growth & regens:** compare scans over time to find the biggest risers and newly generated players.
@@ -29,7 +33,7 @@ hidden attributes and potential, and plan your squad.
 
 ## Requirements
 
-- A Mac with **Apple Silicon** (M1 or newer), **macOS 14 Sonoma** or later
+- A Mac with **Apple Silicon** (M1 or newer), **macOS 14.4 Sonoma** or later
 - **Football Manager 27** on **Steam**. FM26 works too, but FM27 is what's tested.
 - Apple's free **Command Line Tools**, to build the app. If you don't have them, run `xcode-select --install` once.
 
@@ -73,7 +77,7 @@ hidden attributes and potential, and plan your squad.
 
 **First start:** launch FM from Steam as usual. The first start takes a few minutes, and the game may
 close once on its own while BepInEx prepares itself. Just start it again. To check it worked, open
-`BepInEx/LogOutput.log` in the game folder. It should contain `Pitchside 0.2.0 loaded`.
+`BepInEx/LogOutput.log` in the game folder. It should contain `Pitchside 0.3.0 loaded`.
 
 ## Use
 

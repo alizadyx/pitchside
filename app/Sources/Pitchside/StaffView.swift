@@ -89,6 +89,10 @@ struct StaffView: View {
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: true))
                 .scrollContentBackground(.hidden)
+                .contextMenu(forSelectionType: UInt32.self) { ids in
+                    Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyStaffName(ids, lastOnly: false) }
+                    Button(ids.count > 1 ? "Copy Last Names" : "Copy Last Name") { store.copyStaffName(ids, lastOnly: true) }
+                }
             }
         }
         .background(Theme.bg)

@@ -3,22 +3,6 @@ import PitchsideCore
 import Observation
 import SwiftUI
 
-/// What the configurable last column of the players table shows.
-enum ExtraColumn: String, CaseIterable, Identifiable {
-    case value, wage, contract, growth, pricePerCA, interest
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .value: "Value"
-        case .wage: "Wage/wk"
-        case .contract: "Contract"
-        case .growth: "Growth"
-        case .pricePerCA: "£ per CA"
-        case .interest: "Interest"
-        }
-    }
-}
-
 enum Currency: String, CaseIterable, Identifiable {
     case gbp, eur, usd
     var id: String { rawValue }
@@ -30,7 +14,13 @@ enum Currency: String, CaseIterable, Identifiable {
 @Observable
 final class Store {
     // Data
-    var meta: ExportMeta?
+    var meta: ExportMeta? { didSet { readerCache = nil } }
+    @ObservationIgnored private var readerCache: StatReader?
+    /// Reads attribute and stat columns; rebuilt when a new scan arrives.
+    var reader: StatReader? {
+        if readerCache == nil, let meta { readerCache = StatReader(meta: meta) }
+        return readerCache
+    }
     private(set) var allPlayers: [PlayerRow] = []
     private(set) var allStaff: [StaffRow] = []
     var players: [PlayerRow] = []
@@ -67,8 +57,9 @@ final class Store {
             refreshSquad()
         }
     }
-    var extraColumn: ExtraColumn = ExtraColumn(rawValue: UserDefaults.standard.string(forKey: "extraColumn") ?? "") ?? .value {
-        didSet { UserDefaults.standard.set(extraColumn.rawValue, forKey: "extraColumn"); refilter() }
+    /// User-added columns per table ("players", "squad", "signings", "growth"), as StatColumn ids.
+    var columnSets: [String: [String]] = Store.loadJSON("columnSets") ?? StatColumns.defaults {
+        didSet { Store.saveJSON(columnSets, "columnSets") }
     }
 
     // Comparison (up to 3 players)
@@ -124,6 +115,13 @@ final class Store {
     private var interestModelWomen: Bool?
     var signForDepth = false
     var squadReport: SquadReport?
+    /// Everyone at your club (the chosen side), for the My squad list; sorted by `squadSort`.
+    private(set) var squadRows: [PlayerRow] = []
+    /// Where each squad player sits in the formation: "ST", "LB · backup".
+    private(set) var squadRoleText: [UInt32: String] = [:]
+    var squadSort: [KeyPathComparator<PlayerRow>] = [KeyPathComparator(\PlayerRow[extra: "xi"])] {
+        didSet { squadRows.sort(using: squadSort) }
+    }
     var selectedSlot: String? { didSet { refreshSuggestions() } }
     var suggestions: [SquadBuilder.Suggestion] = []
     var clubs: [String] = []
@@ -234,22 +232,17 @@ final class Store {
     func refilter() {
         guard let meta else { players = []; return }
         filterTask?.cancel()
-        let f = filter, rows = allPlayers, sort = playerSort, perUnit = 1 / max(rate, 0.0001), extra = extraColumn
+        let f = filter, rows = allPlayers, sort = playerSort, perUnit = 1 / max(rate, 0.0001)
         let roleIdx = Roles.all.firstIndex { $0.code == f.roleCode }
-        if extra == .interest { ensureInterestModel() }
-        let model = interestModel, club = myClub, women = squadWomen, season = season
+        let cols = columns(for: "players")
+        if cols.contains(where: { $0.id == "gen.interest" }) { ensureInterestModel() }
+        let reader = self.reader, score = interestScorer()
         filterTask = Task.detached(priority: .userInitiated) {
             var out = Filtering.apply(f, to: rows, meta: meta, gbpPerUnit: perUnit)
             for i in out.indices {
                 out[i].selectedRoleScore = roleIdx.map { out[i].roleScores[$0] } ?? out[i].bestRoleScore
-                if extra == .interest {
-                    let r = out[i]
-                    out[i].extraSort = (r.person.f == 1) == women
-                        ? (model?.assess(r, joining: club, season: season)?.score ?? -1) : -1
-                } else {
-                    out[i].extraSort = Store.extraSortValue(out[i], extra)
-                }
             }
+            reader?.fill(&out, cols, interest: score)
             out.sort(using: sort)
             if Task.isCancelled { return }
             let result = out
@@ -349,28 +342,61 @@ final class Store {
         }
     }
 
-    // MARK: - Extra column
+    // MARK: - Columns
 
-    nonisolated static func extraSortValue(_ r: PlayerRow, _ e: ExtraColumn) -> Double {
-        switch e {
-        case .value: return Double(r.value)
-        case .wage: return Double(r.wage)
-        case .contract: return Double(r.expires.replacingOccurrences(of: "-", with: "")) ?? 99_999_999
-        case .growth: return Double(r.growth)
-        case .pricePerCA: return r.pricePerCA
-        case .interest: return -1   // filled in by refilter, which has the interest model
+    func columns(for table: String) -> [StatColumn] {
+        (columnSets[table] ?? StatColumns.defaults[table] ?? []).compactMap(StatColumn.init(id:))
+    }
+
+    func hasColumn(_ c: StatColumn, in table: String) -> Bool { columns(for: table).contains(c) }
+
+    func toggleColumn(_ c: StatColumn, in table: String) {
+        var ids = columns(for: table).map(\.id)
+        if let i = ids.firstIndex(of: c.id) { ids.remove(at: i) } else { ids.append(c.id) }
+        columnSets[table] = ids
+        columnsChanged(table)
+    }
+
+    func resetColumns(_ table: String) {
+        columnSets[table] = StatColumns.defaults[table] ?? []
+        columnsChanged(table)
+    }
+
+    private func columnsChanged(_ table: String) {
+        switch table {
+        case "players": refilter()
+        case "squad": refreshSquad()
+        default: break
         }
     }
 
-    func extraText(_ r: PlayerRow) -> String {
-        switch extraColumn {
-        case .value: return Money.format(r.person.val, symbol: currency.symbol, perGbp: rate)
-        case .wage: return Money.format(r.person.wage, symbol: currency.symbol, perGbp: rate)
-        case .contract: return r.expires.isEmpty ? "—" : String(r.expires.prefix(7))
-        case .growth: return r.growth == PlayerRow.noGrowth ? "—" : (r.growth > 0 ? "+\(r.growth)" : "\(r.growth)")
-        case .pricePerCA: return r.value < 0 ? "—" : Money.format(Int(r.pricePerCA), symbol: currency.symbol, perGbp: rate)
-        case .interest: return interest(for: r)?.level.name ?? "—"
+    /// Interest score for sorting, as a value-type closure safe to use off the main thread.
+    func interestScorer() -> @Sendable (PlayerRow) -> Double? {
+        let model = interestModel, club = myClub, women = squadWomen, season = season
+        return { r in
+            guard !club.isEmpty, (r.person.f == 1) == women else { return nil }
+            return model?.assess(r, joining: club, season: season)?.score
         }
+    }
+
+    /// Display value for a user-added column (nil = no data).
+    func statValue(_ c: StatColumn, _ r: PlayerRow) -> Double? { reader?.value(c, r) }
+
+    func money(_ gbp: Int?) -> String { Money.format(gbp, symbol: currency.symbol, perGbp: rate) }
+
+    /// Puts a player's full name or surname on the clipboard, ready to paste into FM's search.
+    func copyName(_ ids: Set<UInt32>, lastOnly: Bool) {
+        copyText(ids.compactMap { playerRow($0) }.map { lastOnly ? $0.person.lastName : $0.name })
+    }
+
+    func copyStaffName(_ ids: Set<UInt32>, lastOnly: Bool) {
+        copyText(ids.compactMap { staffRow($0) }.map { lastOnly ? $0.person.lastName : $0.name })
+    }
+
+    func copyText(_ lines: [String]) {
+        guard !lines.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
     }
 
     func ensureInterestModel() {
@@ -556,12 +582,28 @@ final class Store {
         guard let meta, !myClub.isEmpty, !allPlayers.isEmpty else { squadReport = nil; suggestions = []; return }
         ensureInterestModel()
         squadReport = SquadBuilder.analyse(club: myClub, formation: formation, rows: teamRows, meta: meta, season: season)
-        if extraColumn == .interest { refilter() }
+        buildSquadRows()
+        if columns(for: "players").contains(where: { $0.id == "gen.interest" }) { refilter() }
         if selectedSlot == nil || !(squadReport?.slots.contains { $0.slot.label == selectedSlot } ?? false) {
             selectedSlot = squadReport?.slots.max { $0.weakness < $1.weakness }?.slot.label
         } else {
             refreshSuggestions()
         }
+    }
+
+    private func buildSquadRows() {
+        guard let report = squadReport else { squadRows = []; squadRoleText = [:]; return }
+        var order: [UInt32: Double] = [:], text: [UInt32: String] = [:]
+        for (i, a) in report.slots.enumerated() {
+            if let s = a.starter { order[s.id] = Double(i); text[s.id] = a.slot.label }
+            if let b = a.backup, order[b.id] == nil { order[b.id] = 100 + Double(i); text[b.id] = "\(a.slot.label) · backup" }
+        }
+        var rows = report.squad
+        for i in rows.indices { rows[i].extras["xi"] = order[rows[i].id] ?? 1000 }
+        reader?.fill(&rows, columns(for: "squad"), interest: interestScorer())
+        rows.sort(using: squadSort)
+        squadRows = rows
+        squadRoleText = text
     }
 
     func refreshSuggestions() {

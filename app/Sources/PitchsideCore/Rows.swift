@@ -35,7 +35,8 @@ public struct PlayerRow: Identifiable, Sendable, Hashable {
     /// Transfer value per CA point (lower = better value); huge when value unknown.
     public var pricePerCA: Double { value >= 0 && ca > 0 ? Double(value) / Double(ca) : 1e12 }
     /// Sort key/text for the configurable extra column.
-    public var extraSort: Double = 0
+    /// Sort keys for user-added columns, keyed by StatColumn.id (see `PlayerRow[extra:]`).
+    public var extras: [String: Double] = [:]
 
     public static func == (a: PlayerRow, b: PlayerRow) -> Bool {
         a.id == b.id && a.age == b.age && a.shortlisted == b.shortlisted && a.selectedRoleScore == b.selectedRoleScore

@@ -245,7 +245,7 @@ public enum SquadBuilder {
 
     public struct Suggestion: Sendable, Identifiable {
         public var id: UInt32 { row.id }
-        public let row: PlayerRow
+        public var row: PlayerRow
         public let score: Double
         public let gain: Double
         public var interest: InterestAssessment? = nil

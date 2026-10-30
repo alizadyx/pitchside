@@ -21,6 +21,7 @@ public struct ExportMeta: Codable, Sendable {
 public struct Person: Codable, Sendable, Hashable, Identifiable {
     public var id: UInt32
     public var n: String
+    public var sn: String?      // surname, when the display name is first + second name
     public var dob: String?
     public var nat: String?
     public var club: String?

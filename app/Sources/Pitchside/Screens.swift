@@ -40,12 +40,15 @@ struct SquadView: View {
     @State private var picked: UInt32?
     @State private var showSave = false
     @State private var saveName = ""
+    @AppStorage("squadMode") private var mode = 0     // 0 plan on the pitch, 1 my squad list
 
     var body: some View {
         VStack(spacing: 0) {
             controls
             Divider()
-            if let report = store.squadReport {
+            if store.squadReport != nil && mode == 1 {
+                MySquadView(picked: $picked)
+            } else if let report = store.squadReport {
                 HSplitView {
                     ScrollView {
                         VStack(spacing: 10) {
@@ -96,6 +99,14 @@ struct SquadView: View {
                         Button(c) { choose(c) }.buttonStyle(.link)
                     }
                 }
+                Picker("View", selection: $mode) {
+                    Text("Plan").tag(0)
+                    Text("My squad").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Plan: formation, weak spots and signings. My squad: everyone at your club in a list.")
                 Picker("Team", selection: $store.squadWomen) {
                     Text("Men").tag(false)
                     Text("Women").tag(true)
@@ -250,6 +261,7 @@ struct SquadView: View {
                 }
                 Spacer()
                 Text("\(store.suggestions.count) found").foregroundStyle(.secondary)
+                ColumnsMenu(table: "signings")
             }
             .padding(10)
             Table(store.suggestions, selection: $picked) {
@@ -286,16 +298,87 @@ struct SquadView: View {
                         .monospacedDigit().lineLimit(1)
                 }
                 .width(min: 90, ideal: 120, max: 170)
-                TableColumn("Contract") { s in
-                    Text(s.row.expires.isEmpty ? "—" : String(s.row.expires.prefix(7))).foregroundStyle(.secondary)
+                TableColumnForEach(store.columns(for: "signings")) { c in
+                    TableColumn(c.shortTitle) { s in StatCell(column: c, row: s.row) }
+                        .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
                 }
-                .width(min: 54, ideal: 62, max: 80)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
             .contextMenu(forSelectionType: UInt32.self) { ids in
-                Button("Add/Remove Shortlist") { ids.forEach { store.toggleShortlist($0) } }
-                Button("Add/Remove from Comparison") { ids.forEach { store.toggleCompare($0) } }
+                PlayerContextItems(ids: ids)
+            }
+        }
+    }
+}
+
+// MARK: - My squad
+
+/// Everyone at your club in one sortable list, with where each player sits in the formation.
+struct MySquadView: View {
+    @Binding var picked: UInt32?
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        @Bindable var store = store
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Text("\(store.squadRows.count) players").font(.callout.weight(.medium)).foregroundStyle(.secondary)
+                Text("XI = starting position in your formation").font(.caption).foregroundStyle(.tertiary)
+                Spacer()
+                ColumnsMenu(table: "squad")
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            Table(store.squadRows, selection: $picked, sortOrder: $store.squadSort) {
+                TableColumn("★", value: \.shortlistKey) { r in
+                    Button { store.toggleShortlist(r.id) } label: {
+                        Image(systemName: store.shortlist.contains(r.id) ? "star.fill" : "star")
+                            .foregroundStyle(store.shortlist.contains(r.id) ? Theme.gold : Color.secondary.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .width(20)
+                TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
+                    .width(min: 130, ideal: 190)
+                TableColumn("XI", value: \PlayerRow[extra: "xi"]) { r in
+                    let t = store.squadRoleText[r.id]
+                    Text(t ?? "—").lineLimit(1)
+                        .fontWeight(t != nil && !(t ?? "").contains("backup") ? .semibold : .regular)
+                        .foregroundStyle(t == nil ? Color.secondary.opacity(0.6)
+                                         : (t ?? "").contains("backup") ? Color.secondary : Theme.accent)
+                }
+                .width(min: 50, ideal: 86, max: 120)
+                TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }
+                    .width(min: 30, ideal: 34, max: 40)
+                TableColumn("Position", value: \.positions) { r in
+                    Text(r.positions).foregroundStyle(.secondary).lineLimit(1)
+                }
+                .width(min: 60, ideal: 110, max: 180)
+                TableColumn("Best role", value: \.bestRoleScore) { r in
+                    HStack(spacing: 4) {
+                        Text(r.bestRole).foregroundStyle(.secondary).frame(minWidth: 26, alignment: .leading)
+                        Text(String(format: "%.1f", r.bestRoleScore)).monospacedDigit()
+                            .foregroundStyle(AttrColor.color(Int(r.bestRoleScore.rounded())))
+                    }
+                }
+                .width(min: 60, ideal: 80, max: 100)
+                TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44)
+                TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44)
+                TableColumn("Contract", value: \.expires) { r in
+                    Text(r.expires.isEmpty ? "—" : String(r.expires.prefix(7))).monospacedDigit().foregroundStyle(.secondary)
+                }
+                .width(min: 54, ideal: 64, max: 80)
+                TableColumnForEach(store.columns(for: "squad")) { c in
+                    TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r) }
+                        .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
+                }
+            }
+            .tableStyle(.inset(alternatesRowBackgrounds: true))
+            .scrollContentBackground(.hidden)
+            .contextMenu(forSelectionType: UInt32.self) { ids in
+                PlayerContextItems(ids: ids)
+            } primaryAction: { ids in
+                if let id = ids.first { picked = id }
             }
         }
     }
@@ -504,6 +587,7 @@ struct RadarView: View {
                 }
                 .frame(maxWidth: 380)
                 Spacer()
+                ColumnsMenu(table: "growth")
             }
             .padding(.horizontal, 12).padding(.bottom, 8)
             if rows.isEmpty {
@@ -542,16 +626,15 @@ struct RadarView: View {
                         Text(String(format: "%.1f", r.meta)).monospacedDigit().foregroundStyle(AttrColor.color(Int(r.meta.rounded())))
                     }
                     .width(min: 36, ideal: 42, max: 50)
-                    TableColumn("Value") { r in
-                        Text(Money.format(r.person.val, symbol: store.currency.symbol, perGbp: store.rate)).monospacedDigit()
+                    TableColumnForEach(store.columns(for: "growth")) { c in
+                        TableColumn(c.shortTitle) { r in StatCell(column: c, row: r) }
+                            .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
                     }
-                    .width(min: 54, ideal: 66, max: 90)
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: true))
                 .scrollContentBackground(.hidden)
                 .contextMenu(forSelectionType: UInt32.self) { ids in
-                    Button("Add/Remove Shortlist") { ids.forEach { store.toggleShortlist($0) } }
-                    Button("Add/Remove from Comparison") { ids.forEach { store.toggleCompare($0) } }
+                    PlayerContextItems(ids: ids)
                 }
             }
         }

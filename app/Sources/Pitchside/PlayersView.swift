@@ -31,10 +31,7 @@ struct PlayersView: View {
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Picker("Last column", selection: $store.extraColumn) {
-                    ForEach(ExtraColumn.allCases) { Text($0.title).tag($0) }
-                }
-                .fixedSize()
+                ColumnsMenu(table: "players")
                 if shortlistOnly {
                     Button("Copy as CSV") {
                         NSPasteboard.general.clearContents()
@@ -153,24 +150,16 @@ struct PlayersTable: View {
                 }
             }
             .width(min: 56, ideal: 76, max: 100)
-            TableColumn(store.extraColumn.title, value: \.extraSort) { r in
-                if store.extraColumn == .interest {
-                    InterestBadge(a: store.interest(for: r))
-                } else {
-                    Text(store.extraText(r)).monospacedDigit().lineLimit(1)
-                        .foregroundStyle(store.extraColumn == .growth
-                                         ? (r.growth > 0 ? Color.green : r.growth < 0 ? Color.red : Color.secondary)
-                                         : Color.primary)
-                }
+            TableColumnForEach(store.columns(for: "players")) { c in
+                TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r) }
+                    .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth)
             }
-            .width(min: 56, ideal: 76, max: 110)
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
         .scrollContentBackground(.hidden)
         .background(Theme.bg)
         .contextMenu(forSelectionType: UInt32.self) { ids in
-            Button("Add/Remove Shortlist") { ids.forEach { store.toggleShortlist($0) } }
-            Button("Add/Remove from Comparison") { ids.forEach { store.toggleCompare($0) } }
+            PlayerContextItems(ids: ids)
         } primaryAction: { ids in
             if let id = ids.first { selection = id }
         }
@@ -417,7 +406,12 @@ struct PlayerDetail: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(p.n).font(.title2.bold()).lineLimit(2).minimumScaleFactor(0.7).textSelection(.enabled)
+                    Text(p.n).font(.title2.bold()).lineLimit(2).minimumScaleFactor(0.7)
+                        .contextMenu {
+                            Button("Copy Name") { store.copyText([p.n]) }
+                            Button("Copy Last Name") { store.copyText([p.lastName]) }
+                        }
+                        .help("Right-click to copy the name for FM's search")
                     if row.isNew { Tag(text: "NEW", color: .purple) }
                 }
                 Text(p.club ?? "Free agent").font(.headline)

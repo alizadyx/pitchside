@@ -17,7 +17,7 @@ internal static class Dumper
     {
         public uint Uid;
         public bool IsPlayer;
-        public string Name, Nation, Club, Division, Dob, Expires, Foot;
+        public string Name, Surname, Nation, Club, Division, Dob, Expires, Foot;
         public int Ca, Pa, Height, Job, Gender, CurRep, WorldRep, StatusFlags;
         public long Value = -1, Asking = -1, Wage = -1;
         public ulong PersonAddr;
@@ -203,6 +203,8 @@ internal static class Dumper
             string first = mem.FmString(person + (ulong)pe.FirstName, nested, to);
             string second = mem.FmString(person + (ulong)pe.SecondName, nested, to);
             common = string.Join(" ", new[] { first, second }.Where(Plausible));
+            // Surname for pasting into FM's search ("De Bruyne"); players known by a common name use that.
+            if (Plausible(first) && Plausible(second)) r.Surname = second;
         }
         r.Name = Plausible(common) ? common : null;
         if (r.Name == null) return;
@@ -342,6 +344,7 @@ internal static class Dumper
         w.WriteStartObject();
         w.WriteNumber("id", r.Uid);
         w.WriteString("n", r.Name);
+        if (r.Surname != null) w.WriteString("sn", r.Surname);
         if (r.Dob != null) w.WriteString("dob", r.Dob);
         if (r.Nation != null) w.WriteString("nat", r.Nation);
         if (r.Club != null) w.WriteString("club", r.Club);

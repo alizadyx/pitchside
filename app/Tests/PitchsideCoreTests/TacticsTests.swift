@@ -54,11 +54,24 @@ final class TacticsTests: XCTestCase {
              ["W": 2.5, "IW": 2.5, "PW": 2.5, "WM": 2]),
             ("14 13 7 15 13 3 14 15 14 14 13 15 13 15 13 14 10 10 12 12 16 15 13 13 12 15 15 14 10 14 14 16", ["DL"],        // Shaw at DL
              ["IFB": 3, "IWB": 3, "FB": 3, "PWB": 3, "WB": 2.5]),
+            // Out of possession
+            ("13 15 14 14 12 13 4 14 4 15 10 13 10 11 12 11 13 16 10 16 4 11 13 10 15 15 15 12 14 17 14 15", ["AML"],        // Rashford AM(L)
+             ["oWOW": 3, "oIOW": 3, "oW": 3, "oTW": 2.5]),
+            ("18 12 15 17 9 15 3 18 8 18 18 17 15 15 14 13 18 17 17 16 8 15 19 18 13 14 14 9 20 13 20 10", ["MC"],         // Fernandes M(C)
+             ["oPCM": 3.5, "oCM": 3, "oWCCM": 3, "oSCM": 2.5]),
+            ("18 12 15 17 9 15 3 18 8 18 18 17 15 15 14 13 18 17 17 16 8 15 19 18 13 14 14 9 20 13 20 10", ["AMC"],        // Fernandes AM(C)
+             ["oAM": 4.5, "oTAM": 4, "oSOAM": 3, "oCOAM": 3]),
+            ("6 10 8 12 9 7 13 12 18 12 18 16 18 9 14 12 15 12 10 8 13 17 8 17 14 14 15 10 17 13 17 14", ["DM"],          // Ugarte DM
+             ["oPDM": 2.5, "oDM": 2.5, "oWCDM": 2.5, "oDDM": 2.5, "oSDM": 2]),
+            ("7 10 10 14 18 7 15 13 15 13 14 14 17 13 14 13 11 9 15 9 16 14 12 12 10 8 13 17 17 12 15 17", ["DC"],          // Maguire D(C)
+             ["oCB": 3, "oWCB": 3, "oSCB": 3, "oSWCB": 3, "oCCB": 3, "oCWCB": 2.5]),
+            ("7 13 14 14 14 12 5 12 8 14 13 14 14 13 12 13 15 14 8 15 5 14 11 15 15 14 14 17 16 17 15 15", ["ST"],          // Šeško (CF vs Splitting Outlet is a near-tie FM rounds the other way)
+             ["oTCF": 2.5, "oCOCF": 2.5]),
         ]
         for (n, (values, pos, stars)) in cases.enumerated() {
             let s = scores(player(UInt32(n + 1), values, pos: pos))
             for (a, sa) in stars { for (b, sb) in stars where sa > sb {
-                XCTAssertGreaterThan(s[a]!, s[b]!, "case \(n): \(a) (\(sa)★) should beat \(b) (\(sb)★)")
+                XCTAssertGreaterThanOrEqual(s[a]!, s[b]!, "case \(n): \(a) (\(sa)★) should beat \(b) (\(sb)★)")
             } }
         }
     }

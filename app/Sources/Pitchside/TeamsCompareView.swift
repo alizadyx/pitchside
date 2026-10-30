@@ -150,10 +150,10 @@ private struct LeaguePane: View {
     @Environment(Store.self) private var store
     @State private var country = ""
     @State private var league = ""
-    @State private var sortID = "level"
+    @State private var sortID = "rating"
     @State private var selected = ""
     @AppStorage("leagueVsAverage") private var vsAverage = false
-    static let columns = ["level", "depth", "ca", "gk", "def", "mid", "att", "technique", "pace", "work", "aerial",
+    static let columns = ["rating", "level", "depth", "ca", "gk", "def", "mid", "att", "technique", "pace", "work", "aerial",
                           "setpieces", "age", "wages"]
 
     var body: some View {

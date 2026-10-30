@@ -31,18 +31,20 @@ struct DepthView: View {
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 Divider()
-                ScrollView([.vertical, .horizontal]) {
-                    VStack(spacing: 14) {
-                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                            HStack(alignment: .top, spacing: 12) {
-                                ForEach(row) { d in DepthCard(d: d, starts: starts, picked: $picked) }
+                GeometryReader { geo in
+                    ScrollView([.vertical, .horizontal]) {
+                        VStack(spacing: 14) {
+                            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                                DepthRowLayout(xs: row.map(\.x)) {
+                                    ForEach(row) { d in DepthCard(d: d, starts: starts, picked: $picked) }
+                                }
                             }
-                            .frame(maxWidth: .infinity)
                         }
+                        .padding(18)
+                        .frame(width: max(geo.size.width - 24, DepthRowLayout.minWidth + 36))
+                        .background(PitchBackground().opacity(0.55))
+                        .padding(12)
                     }
-                    .padding(18)
-                    .background(PitchBackground().opacity(0.55))
-                    .padding(12)
                 }
             }
         } else {
@@ -116,5 +118,38 @@ private struct DepthCard: View {
                      : "Accomplished, not a natural (familiarity \(o.familiarity))")
         if let e = elsewhere { parts.append("Starts at \(e) in your XI") }
         return parts.joined(separator: "\n")
+    }
+}
+
+/// Lays a line of position cards out across the pitch at each position's own left–right spot
+/// (wingers and wing backs wide, centre players in the middle), nudging cards apart if they'd overlap.
+struct DepthRowLayout: Layout {
+    let xs: [Double]
+    var spacing: CGFloat = 12
+    static let minWidth: CGFloat = 5 * 200 + 4 * 12
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let h = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+        return CGSize(width: max(proposal.width ?? Self.minWidth, Self.minWidth), height: h)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        var lefts: [CGFloat] = []
+        for (i, size) in sizes.enumerated() {
+            let x = i < xs.count ? xs[i] : 0.5
+            var left = bounds.minX + CGFloat(x) * bounds.width - size.width / 2
+            left = max(left, bounds.minX)
+            if i > 0 { left = max(left, lefts[i - 1] + sizes[i - 1].width + spacing) }
+            lefts.append(left)
+        }
+        var limit = bounds.maxX
+        for i in lefts.indices.reversed() {
+            if lefts[i] + sizes[i].width > limit { lefts[i] = limit - sizes[i].width }
+            limit = lefts[i] - spacing
+        }
+        for (i, view) in subviews.enumerated() {
+            view.place(at: CGPoint(x: lefts[i], y: bounds.minY), anchor: .topLeading, proposal: ProposedViewSize(sizes[i]))
+        }
     }
 }

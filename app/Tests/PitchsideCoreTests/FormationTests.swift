@@ -90,9 +90,12 @@ final class FormationTests: XCTestCase {
         XCTAssertTrue(st.options.allSatisfy { $0.row.person.pos?[Factory.posKeys.firstIndex(of: "ST")!] ?? 0 >= 12 })
         XCTAssertEqual(st.options.map(\.score), st.options.map(\.score).sorted(by: >), "best first")
         for line in chart {
-            let xs = line.map { PitchLayout.points(for: report.slots.map(\.slot))[$0.slot.label]!.x }
+            let xs = line.map(\.x)
             XCTAssertEqual(xs, xs.sorted(), "left to right")
         }
+        let wingers = chart.flatMap { $0 }.filter { ["AML", "AMR"].contains($0.slot.position) }.map(\.x)
+        XCTAssertEqual(wingers.count, 2)
+        XCTAssertTrue(wingers[0] < 0.3 && wingers[1] > 0.7, "wingers sit wide, not in the middle")
         let natural = SquadBuilder.depthChart(report, meta: meta, naturalOnly: true)
         let amcEveryone = SquadBuilder.depthChart(report, meta: meta, limit: 30).flatMap { $0 }
             .filter { $0.slot.position == "AMC" }.flatMap(\.options)

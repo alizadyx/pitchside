@@ -35,6 +35,7 @@ hidden attributes and potential, and plan your squad.
   the top club; any two clubs head to head; or one club against the average of up to five. Judge clubs
   on their first-team XI, the best XI at the whole club, or their top 18. Cells are coloured by rank in
   the league, can show the difference from the league average, and explain themselves on hover.
+  XI level also comes as a 0–100 Rating ((level − 6) × 10) so gaps between clubs are easier to read.
 - **Your own columns:** add any stat, attribute, hidden attribute or personality trait as a column to the
   player, squad, signings and growth tables, sort by it, and drag column headers to reorder them.
 - **Right-click to copy** a player's name, ready to paste into FM's search.

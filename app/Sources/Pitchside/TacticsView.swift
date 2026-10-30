@@ -40,6 +40,9 @@ struct FormationsPane: View {
                         Spacer()
                         Text(String(format: "%.1f", f.level)).bold().monospacedDigit()
                             .foregroundStyle(AttrColor.color(Int(f.level.rounded())))
+                        Text("\(Int(TeamCompare.rating(f.level).rounded()))").monospacedDigit()
+                            .foregroundStyle(.secondary).frame(minWidth: 24, alignment: .trailing)
+                            .help("Rating (0–100)")
                         if f.rating >= best - 0.05 {
                             Image(systemName: "crown.fill").foregroundStyle(Theme.gold).help("Best fit")
                         }
@@ -59,6 +62,8 @@ struct FormationsPane: View {
     private func summary(_ fit: TacticsAdvisor.FormationFit) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Stat(title: "XI level", value: String(format: "%.1f", fit.level), color: AttrColor.color(Int(fit.level.rounded())))
+            Stat(title: "Rating", value: "\(Int(TeamCompare.rating(fit.level).rounded()))", color: AttrColor.color(Int(fit.level.rounded())))
+                .help(TeamCompare.metric("rating")?.explanation ?? "")
             Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
             Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
             VStack(alignment: .leading, spacing: 6) {

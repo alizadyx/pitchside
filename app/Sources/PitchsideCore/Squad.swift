@@ -459,6 +459,8 @@ public enum SquadBuilder {
         public var id: String { slot.label }
         public let slot: Slot
         public let options: [Option]
+        /// Where the position sits across the pitch: 0 = left touchline, 1 = right.
+        public var x: Double = 0.5
     }
 
     /// Familiarity from which a player counts as a natural in a position (below: accomplished).
@@ -480,7 +482,8 @@ public enum SquadBuilder {
                     DepthSlot(slot: a.slot, options: Array(
                         options(for: a.slot, squad: report.squad, meta: meta, limit: .max)
                             .filter { !naturalOnly || $0.familiarity >= naturalFamiliarity }
-                            .prefix(limit)))
+                            .prefix(limit)),
+                              x: points[a.slot.label]?.x ?? 0.5)
                 }
             return row.isEmpty ? nil : row
         }

@@ -38,8 +38,13 @@ public enum TeamCompare {
         public var explanation: String { TeamCompare.explanations[id] ?? title }
     }
 
+    /// XI level on a 0–100 scale: (level − 6) × 10, so one point of level is ten rating points.
+    /// About 50 is a lower-league side, 70 a typical top-flight side, 90+ a title contender.
+    public static func rating(_ level: Double) -> Double { min(100, max(0, (level - 6) * 10)) }
+
     static let explanations: [String: String] = [
-        "level": "XI level: average role score (1–20) of the best eleven in their best shape, IP and OOP roles together — the same score as in Tactics. About 1 point is a big gap (roughly 15–20 CA).",
+        "rating": "Rating: XI level stretched to 0–100 so gaps are easier to see — (level − 6) × 10. Roughly: 50 lower league, 70 typical top flight, 90+ title contender. 10 rating points ≈ 15–20 CA.",
+        "level": "XI level: average role score (1–20) of the best eleven in their best shape, IP and OOP roles together — the same score as in Tactics. About 1 point is a big gap (roughly 15–20 CA); Rating shows it on 0–100.",
         "depth": "Depth: average role score of the best backup for each of the eleven positions.",
         "ca": "Average Current Ability of the players being compared (0–200).",
         "pa": "Average Potential Ability of the players being compared (0–200).",
@@ -66,6 +71,7 @@ public enum TeamCompare {
     ]
 
     public static let metrics: [Metric] = [
+        Metric(id: "rating", title: "Rating (0–100)", short: "Rating", group: "Overall", higherIsBetter: true, decimals: 0, attributeScale: false),
         Metric(id: "level", title: "XI level", short: "Level", group: "Overall", higherIsBetter: true, decimals: 1, attributeScale: true),
         Metric(id: "depth", title: "Depth (best backups)", short: "Depth", group: "Overall", higherIsBetter: true, decimals: 1, attributeScale: true),
         Metric(id: "ca", title: "Average CA", short: "CA", group: "Overall", higherIsBetter: true, decimals: 0, attributeScale: false),
@@ -151,6 +157,7 @@ public enum TeamCompare {
         }
         var v: [String: Double] = [:]
         v["level"] = basis == .top18 ? (fit.level * 11 + measured.dropFirst(11).map(\.bestRoleScore).reduce(0, +)) / Double(max(measured.count, 1)) : fit.level
+        v["rating"] = rating(v["level"] ?? 0)
         v["depth"] = fit.depth
         v["ca"] = avg(measured) { Double($0.ca) }
         v["pa"] = avg(measured) { Double($0.pa) }

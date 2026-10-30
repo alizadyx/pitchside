@@ -178,7 +178,8 @@ struct SquadView: View {
                     Text(r.club).font(.headline)
                     Text("\(r.squad.count) players")
                     Text("avg age \(String(format: "%.1f", r.averageAge))")
-                    Text("starter level \(String(format: "%.1f", r.level))")
+                    Text("starter level \(String(format: "%.1f", r.level)) · rating \(Int(TeamCompare.rating(r.level).rounded()))")
+                        .help(TeamCompare.metric("rating")?.explanation ?? "")
                     Text("reputation \(r.reputation)")
                 }
                 .font(.callout).foregroundStyle(.secondary)

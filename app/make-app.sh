@@ -18,6 +18,7 @@ APP="Pitchside.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Pitchside"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -27,9 +28,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key><string>Pitchside</string>
   <key>CFBundleIdentifier</key><string>local.pitchside.app</string>
   <key>CFBundleExecutable</key><string>Pitchside</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.3.2</string>
-  <key>CFBundleVersion</key><string>4</string>
+  <key>CFBundleShortVersionString</key><string>0.4.0</string>
+  <key>CFBundleVersion</key><string>5</string>
   <key>LSMinimumSystemVersion</key><string>14.4</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.sports-games</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -37,4 +39,5 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 codesign --force -s - "$APP" >/dev/null 2>&1 || true
+touch "$APP"   # refresh the Finder/Dock icon cache
 echo "Built: $(pwd)/$APP"

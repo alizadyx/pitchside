@@ -286,7 +286,7 @@ public enum AttributeGroups {
     // FM27 staff attributes (Coaching / Mental / Knowledge / Medical & data).
     public static let staffCoaching = ["Attacking", "Defending", "Fitness", "Goalkeeping", "Possession", "SetPieces",
                                        "Tactical", "Technical", "WorkingWithYoungsters"]
-    public static let staffMental = ["Determination", "Motivating", "PeopleManagement"]
+    public static let staffMental = ["Determination", "Motivating", "PeopleManagement", "Authority", "Adaptability"]
     public static let staffKnowledge = ["JudgingAbility", "JudgingPotential", "JudgingStaff", "Negotiating", "TacticalKnowledge",
                                         "DataAnalysis", "Physiotherapy", "SportsScience"]
 

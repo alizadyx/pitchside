@@ -26,6 +26,8 @@ public struct Person: Codable, Sendable, Hashable, Identifiable {
     public var nat: String?
     public var club: String?
     public var div: String?
+    public var tm: UInt32?      // which of the club's teams the contract is with
+    public var trep: Int?       // that team's reputation (first team highest)
     public var ca: Int
     public var pa: Int
     public var rep: Int?
@@ -100,6 +102,8 @@ public struct PluginRequest: Codable, Sendable {
     public var at: Int64
     public var database: String
     public var targets: [CalibrationTarget]
+    /// Your club: the plugin also writes clubprobe.txt for it (teams, contracts, staff, date).
+    public var club: String?
 
     public init(mode: String, database: String, targets: [CalibrationTarget] = []) {
         self.mode = mode

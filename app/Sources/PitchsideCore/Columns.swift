@@ -50,6 +50,8 @@ public enum StatColumns {
         General(key: "height", title: "Height"),
         General(key: "rep", title: "Reputation"),
         General(key: "wrep", title: "World rep."),
+        General(key: "likelyPeak", title: "Likely peak"),
+        General(key: "redFlags", title: "Red flags"),
         General(key: "nation", title: "Nationality"),
         General(key: "division", title: "Division"),
     ]
@@ -104,8 +106,10 @@ public struct StatReader: Sendable {
     let attr: [String: Int]
     let hidden: [String: Int]
     let personality: [String: Int]
+    let meta: ExportMeta
 
     public init(meta: ExportMeta) {
+        self.meta = meta
         attr = Dictionary(meta.playerAttrKeys.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         hidden = Dictionary(meta.hiddenKeys.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         personality = Dictionary(meta.personalityKeys.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
@@ -140,6 +144,8 @@ public struct StatReader: Sendable {
             case "height": return p.ht.flatMap { $0 > 0 ? Double($0) : nil }
             case "rep": return p.rep.map(Double.init)
             case "wrep": return p.wrep.map(Double.init)
+            case "likelyPeak": return Development.outlook(r, meta: meta).map { Double($0.likelyPeak) }
+            case "redFlags": return Double(Flags.of(p, meta: meta).filter { !$0.good }.count)
             default: return nil
             }
         }

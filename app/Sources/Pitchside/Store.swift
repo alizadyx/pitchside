@@ -115,6 +115,16 @@ final class Store {
     private var interestModelWomen: Bool?
     var signForDepth = false
     var squadReport: SquadReport?
+    /// The club's teams (first team, U21, U18…) found in contracts; empty with older scans.
+    private(set) var clubTeams: [ClubTeam] = []
+    /// Which team the builder looks at: 0 = first team, n = n-th team by reputation, -1 = all teams.
+    var squadTeamRank: Int = UserDefaults.standard.object(forKey: "squadTeamRank") as? Int ?? 0 {
+        didSet { UserDefaults.standard.set(squadTeamRank, forKey: "squadTeamRank"); refreshSquad() }
+    }
+    /// The squad over the next three seasons, for the Timeline view.
+    private(set) var squadTimeline: [SquadBuilder.SeasonPlan] = []
+    /// Staff upgrades for your club, weakest area first.
+    private(set) var staffAdvice: [StaffAdvisor.Advice] = []
     /// Everyone at your club (the chosen side), for the My squad list; sorted by `squadSort`.
     private(set) var squadRows: [PlayerRow] = []
     /// Where each squad player sits in the formation: "ST", "LB · backup".
@@ -305,7 +315,11 @@ final class Store {
     var isBusy: Bool { status?.state == "scanning" }
 
     // Always scan both databases; the Men/Women switch filters instantly.
-    func scan() { send(PluginRequest(mode: "dump", database: "both")) }
+    func scan() {
+        var r = PluginRequest(mode: "dump", database: "both")
+        if !myClub.isEmpty { r.club = myClub }
+        send(r)
+    }
 
     func calibrate() {
         let valid = targets.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -590,9 +604,20 @@ final class Store {
     }
 
     func refreshSquad() {
-        guard let meta, !myClub.isEmpty, !allPlayers.isEmpty else { squadReport = nil; suggestions = []; return }
+        guard let meta, !myClub.isEmpty, !allPlayers.isEmpty else {
+            squadReport = nil; suggestions = []; clubTeams = []; squadTimeline = []; return
+        }
         ensureInterestModel()
-        squadReport = SquadBuilder.analyse(club: myClub, formation: formation, rows: teamRows, meta: meta, season: season)
+        let side = teamRows
+        clubTeams = SquadBuilder.teams(club: myClub, rows: side)
+        var rows = side
+        if !clubTeams.isEmpty && squadTeamRank >= 0 {
+            let chosen = clubTeams[min(squadTeamRank, clubTeams.count - 1)].id
+            rows = side.filter { $0.person.club != myClub || $0.person.tm == chosen }
+        }
+        squadReport = SquadBuilder.analyse(club: myClub, formation: formation, rows: rows, meta: meta, season: season)
+        squadTimeline = SquadBuilder.timeline(club: myClub, formation: formation, squad: squadReport?.squad ?? [],
+                                              meta: meta, season: season)
         buildSquadRows()
         if columns(for: "players").contains(where: { $0.id == "gen.interest" }) { refilter() }
         if selectedSlot == nil || !(squadReport?.slots.contains { $0.slot.label == selectedSlot } ?? false) {
@@ -615,6 +640,12 @@ final class Store {
         rows.sort(using: squadSort)
         squadRows = rows
         squadRoleText = text
+    }
+
+    func refreshStaffAdvice() {
+        guard let meta, !myClub.isEmpty else { staffAdvice = []; return }
+        let cap = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
+        staffAdvice = StaffAdvisor.advise(club: myClub, staff: allStaff, meta: meta, maxWageGbp: cap)
     }
 
     func refreshSuggestions() {

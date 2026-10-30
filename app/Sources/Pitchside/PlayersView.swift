@@ -384,6 +384,7 @@ struct PlayerDetail: View {
                 header(p)
                 abilityTiles(p)
                 if let a = store.interest(for: row) { interestCard(a) }
+                if let meta { insightsCard(meta) }
                 if let meta { positionsAndRoles(p, meta) }
                 if let attrs = p.a, let meta { attributeCards(attrs, meta) }
                 if !store.hideHidden, let meta { hiddenCards(p, meta) }
@@ -391,6 +392,45 @@ struct PlayerDetail: View {
             .padding(12)
         }
         .background(Theme.bg)
+    }
+
+    /// Red and green flags, plus how much of his potential a young player is likely to reach.
+    @ViewBuilder private func insightsCard(_ meta: ExportMeta) -> some View {
+        let flags = Flags.of(row.person, meta: meta, includeHidden: !store.hideHidden)
+        let dev = Development.outlook(row, meta: meta)
+        if !flags.isEmpty || dev != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                if let dev {
+                    HStack(spacing: 8) {
+                        Text("Development outlook").font(.callout).foregroundStyle(.secondary)
+                        Spacer(minLength: 4)
+                        Text(dev.label)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(devColor(dev).opacity(0.18), in: Capsule())
+                            .foregroundStyle(devColor(dev))
+                    }
+                    Text("Likely to reach about **\(dev.likelyPeak)** ability (potential \(row.pa), now \(row.ca))")
+                        .font(.callout)
+                    if !dev.reasons.isEmpty {
+                        Text(dev.reasons.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if !flags.isEmpty {
+                    if dev != nil { Divider() }
+                    FlowLayout(spacing: 6) {
+                        ForEach(flags) { f in FlagChip(flag: f) }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fmCard()
+        }
+    }
+
+    private func devColor(_ d: DevelopmentOutlook) -> Color {
+        d.realisation >= 0.75 ? .green : d.realisation >= 0.55 ? Color(red: 0.75, green: 0.85, blue: 0.3)
+            : d.realisation >= 0.4 ? .orange : .red
     }
 
     private func interestCard(_ a: InterestAssessment) -> some View {
@@ -637,5 +677,19 @@ struct PresetsMenu: View {
         } message: {
             Text("Saves all current filters under this name.")
         }
+    }
+}
+
+/// A green or red flag with the attribute behind it as a tooltip.
+struct FlagChip: View {
+    let flag: PlayerFlag
+    var body: some View {
+        Label(flag.text, systemImage: flag.good ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            .font(.callout)
+            .lineLimit(1)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background((flag.good ? Color.green : Color.red).opacity(0.15), in: Capsule())
+            .foregroundStyle(flag.good ? Color.green : Color(red: 1, green: 0.45, blue: 0.4))
+            .help(flag.detail)
     }
 }

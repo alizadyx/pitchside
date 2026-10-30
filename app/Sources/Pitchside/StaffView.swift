@@ -7,6 +7,7 @@ struct StaffView: View {
     @SceneStorage("table.staff") private var columnLayout: TableColumnCustomization<StaffRow>
     @State private var selection: UInt32?
     @AppStorage("showStaffFilters") private var showFilters = true
+    @AppStorage("staffMode") private var mode = 0     // 0 search, 1 recommendations for my club
 
     var body: some View {
         @Bindable var store = store
@@ -16,83 +17,100 @@ struct StaffView: View {
             .filter { $0 }.count
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Button { withAnimation(.snappy) { showFilters.toggle() } } label: {
-                    Label(activeCount > 0 ? "Filters (\(activeCount))" : "Filters", systemImage: "line.3.horizontal.decrease.circle")
+                Picker("Mode", selection: $mode) {
+                    Text("Search").tag(0)
+                    Text("For my club").tag(1)
                 }
-                .tint(activeCount > 0 ? Theme.accent : nil)
-                .buttonStyle(.bordered)
-                if activeCount > 0 {
-                    Button("Clear") {
-                        var n = StaffFilter(); n.gender = store.staffFilter.gender; store.staffFilter = n
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                if mode == 0 {
+                    Button { withAnimation(.snappy) { showFilters.toggle() } } label: {
+                        Label(activeCount > 0 ? "Filters (\(activeCount))" : "Filters", systemImage: "line.3.horizontal.decrease.circle")
                     }
-                    .buttonStyle(.link)
+                    .tint(activeCount > 0 ? Theme.accent : nil)
+                    .buttonStyle(.bordered)
+                    if activeCount > 0 {
+                        Button("Clear") {
+                            var n = StaffFilter(); n.gender = store.staffFilter.gender; store.staffFilter = n
+                        }
+                        .buttonStyle(.link)
+                    }
+                    Text("\(store.staff.count.formatted()) staff").foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("Column", selection: $store.staffColumnKey) {
+                        ForEach(keys, id: \.self) { Text(AttributeGroups.label($0)).tag($0) }
+                    }
+                    .frame(maxWidth: 240)
+                } else {
+                    Text(store.myClub.isEmpty ? "Pick your club in Squad builder first" : "Upgrades for \(store.myClub), weakest area first")
+                        .foregroundStyle(.secondary)
+                    Spacer()
                 }
-                Text("\(store.staff.count.formatted()) staff").foregroundStyle(.secondary)
-                Spacer()
-                Picker("Column", selection: $store.staffColumnKey) {
-                    ForEach(keys, id: \.self) { Text(AttributeGroups.label($0)).tag($0) }
-                }
-                .frame(maxWidth: 240)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             Divider()
-            HStack(spacing: 0) {
-                if showFilters {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            FilterGroup(title: "Search", active: !f.text.isEmpty || !f.job.isEmpty) {
-                                TextField("Name or club", text: $store.staffFilter.text)
-                                TextField("Job (Coach, Scout, Physio…)", text: $store.staffFilter.job)
-                            }
-                            .textFieldStyle(.roundedBorder)
-                            FilterGroup(title: "Ability & age", active: f.minAge != 15 || f.maxAge != 90 || f.minCA > 0) {
-                                Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
-                                    GridRow {
-                                        Text("Age")
-                                        NumberField(value: $store.staffFilter.minAge)
-                                        Text("–")
-                                        NumberField(value: $store.staffFilter.maxAge)
+            if mode == 1 {
+                StaffAdviceView(selection: $selection)
+            } else {
+                HStack(spacing: 0) {
+                    if showFilters {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 10) {
+                                FilterGroup(title: "Search", active: !f.text.isEmpty || !f.job.isEmpty) {
+                                    TextField("Name or club", text: $store.staffFilter.text)
+                                    TextField("Job (Coach, Scout, Physio…)", text: $store.staffFilter.job)
+                                }
+                                .textFieldStyle(.roundedBorder)
+                                FilterGroup(title: "Ability & age", active: f.minAge != 15 || f.maxAge != 90 || f.minCA > 0) {
+                                    Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+                                        GridRow {
+                                            Text("Age")
+                                            NumberField(value: $store.staffFilter.minAge)
+                                            Text("–")
+                                            NumberField(value: $store.staffFilter.maxAge)
+                                        }
+                                        GridRow { Text("Min CA"); NumberField(value: $store.staffFilter.minCA) }
                                     }
-                                    GridRow { Text("Min CA"); NumberField(value: $store.staffFilter.minCA) }
+                                }
+                                FilterGroup(title: "Attributes", active: !f.rules.isEmpty) {
+                                    AttributeRulesEditor(rules: $store.staffFilter.rules, keys: keys)
                                 }
                             }
-                            FilterGroup(title: "Attributes", active: !f.rules.isEmpty) {
-                                AttributeRulesEditor(rules: $store.staffFilter.rules, keys: keys)
+                            .padding(10)
+                        }
+                        .frame(width: 290)
+                        .background(Theme.panelAlt.opacity(0.4))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                        Divider()
+                    }
+                    Table(store.staff, selection: $selection, sortOrder: $store.staffSort, columnCustomization: $columnLayout) {
+                        TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
+                            .width(min: 130, ideal: 190).customizationID("name")
+                        TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 42).customizationID("age")
+                        TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }.width(min: 80, ideal: 140, max: 220).customizationID("job")
+                        TableColumn("Club", value: \.club) { r in Text(r.club).lineLimit(1).foregroundStyle(.secondary) }
+                            .width(min: 90, ideal: 150, max: 260).customizationID("club")
+                        TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
+                        TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
+                        TableColumn(AttributeGroups.label(store.staffColumnKey), value: \.selectedAttr) { r in
+                            HStack(spacing: 6) {
+                                AttrBox(value: r.selectedAttr)
+                                Text(r.selectedAttr > 0 ? AttributeGroups.staffWord(r.selectedAttr) : "")
+                                    .foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
-                        .padding(10)
-                    }
-                    .frame(width: 290)
-                    .background(Theme.panelAlt.opacity(0.4))
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-                    Divider()
-                }
-                Table(store.staff, selection: $selection, sortOrder: $store.staffSort, columnCustomization: $columnLayout) {
-                    TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
-                        .width(min: 130, ideal: 190).customizationID("name")
-                    TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 42).customizationID("age")
-                    TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }.width(min: 80, ideal: 140, max: 220).customizationID("job")
-                    TableColumn("Club", value: \.club) { r in Text(r.club).lineLimit(1).foregroundStyle(.secondary) }
-                        .width(min: 90, ideal: 150, max: 260).customizationID("club")
-                    TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
-                    TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
-                    TableColumn(AttributeGroups.label(store.staffColumnKey), value: \.selectedAttr) { r in
-                        HStack(spacing: 6) {
-                            AttrBox(value: r.selectedAttr)
-                            Text(r.selectedAttr > 0 ? AttributeGroups.staffWord(r.selectedAttr) : "")
-                                .foregroundStyle(.secondary).lineLimit(1)
+                        .width(min: 80, ideal: 120, max: 160).customizationID("attr")
+                        TableColumn("Contract", value: \.expires) { r in
+                            Text(r.expires.isEmpty ? "—" : String(r.expires.prefix(7))).foregroundStyle(.secondary)
                         }
+                        .width(min: 54, ideal: 64, max: 80).customizationID("contract")
                     }
-                    .width(min: 80, ideal: 120, max: 160).customizationID("attr")
-                    TableColumn("Contract", value: \.expires) { r in
-                        Text(r.expires.isEmpty ? "—" : String(r.expires.prefix(7))).foregroundStyle(.secondary)
+                    .tableStyle(.inset(alternatesRowBackgrounds: true))
+                    .scrollContentBackground(.hidden)
+                    .contextMenu(forSelectionType: UInt32.self) { ids in
+                        Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyStaffName(ids) }
                     }
-                    .width(min: 54, ideal: 64, max: 80).customizationID("contract")
-                }
-                .tableStyle(.inset(alternatesRowBackgrounds: true))
-                .scrollContentBackground(.hidden)
-                .contextMenu(forSelectionType: UInt32.self) { ids in
-                    Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyStaffName(ids) }
                 }
             }
         }
@@ -178,5 +196,77 @@ struct StaffAttrList: View {
             }
             .fmCard(padding: 10)
         }
+    }
+}
+
+/// For each staff area, your best person and clear upgrades from elsewhere (weakest area first).
+struct StaffAdviceView: View {
+    @Binding var selection: UInt32?
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                if store.myClub.isEmpty {
+                    Text("Type your club in Squad builder, then come back here.").foregroundStyle(.secondary)
+                } else if store.staffAdvice.isEmpty {
+                    Text("No staff data yet. Scan the game first.").foregroundStyle(.secondary)
+                } else {
+                    if store.wageBudget > 0 {
+                        Text("Only staff within your wage budget of \(store.currency.symbol)\(store.wageBudget.formatted())/wk (set in Squad builder).")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 10, alignment: .top)], spacing: 10) {
+                        ForEach(store.staffAdvice) { a in card(a) }
+                    }
+                }
+            }
+            .padding(12)
+        }
+        .onAppear { store.refreshStaffAdvice() }
+        .onChange(of: store.myClub) { store.refreshStaffAdvice() }
+        .onChange(of: store.wageBudget) { store.refreshStaffAdvice() }
+        .onChange(of: store.allStaff.count) { store.refreshStaffAdvice() }
+    }
+
+    private func card(_ a: StaffAdvisor.Advice) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(a.area.title).font(.headline)
+                Spacer()
+                if a.best != nil {
+                    Text(String(format: "yours: %.0f", a.bestScore)).monospacedDigit()
+                        .foregroundStyle(AttrColor.color(Int(a.bestScore.rounded())))
+                } else {
+                    Text("nobody").foregroundStyle(.red)
+                }
+            }
+            if let b = a.best {
+                Text("\(b.name) · \(b.job)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Divider()
+            if a.candidates.isEmpty {
+                Text("No clear upgrade available").font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(a.candidates) { c in
+                Button { selection = c.row.id } label: {
+                    HStack(spacing: 8) {
+                        AttrBox(value: Int(c.score.rounded()))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(c.row.name).lineLimit(1)
+                            Text([c.row.job, c.row.club.isEmpty ? "Free agent" : c.row.club, "\(c.row.age)"]
+                                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer(minLength: 4)
+                        Text(c.row.wage >= 0 ? store.money(c.row.wage) + "/wk" : "—")
+                            .font(.callout).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .fmCard()
     }
 }

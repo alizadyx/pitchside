@@ -50,6 +50,8 @@ struct SquadView: View {
             Divider()
             if store.squadReport != nil && mode == 1 {
                 MySquadView(picked: $picked)
+            } else if store.squadReport != nil && mode == 2 {
+                SquadTimelineView(picked: $picked)
             } else if let report = store.squadReport {
                 HSplitView {
                     ScrollView {
@@ -104,11 +106,21 @@ struct SquadView: View {
                 Picker("View", selection: $mode) {
                     Text("Plan").tag(0)
                     Text("My squad").tag(1)
+                    Text("Timeline").tag(2)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help("Plan: formation, weak spots and signings. My squad: everyone at your club in a list.")
+                .help("Plan: formation, weak spots and signings. My squad: everyone in the list. Timeline: the next three seasons.")
+                if store.clubTeams.count > 1 {
+                    Picker("Squad", selection: $store.squadTeamRank) {
+                        ForEach(store.clubTeams) { t in Text("\(t.label) (\(t.count))").tag(t.rank) }
+                        Divider()
+                        Text("All teams").tag(-1)
+                    }
+                    .fixedSize()
+                    .help("First team, youth and reserve teams are told apart by their contracts")
+                }
                 Picker("Team", selection: $store.squadWomen) {
                     Text("Men").tag(false)
                     Text("Women").tag(true)
@@ -814,6 +826,95 @@ extension InterestLevel {
         case .persuadable: Color(red: 0.75, green: 0.85, blue: 0.3)
         case .doubtful: .orange
         case .unlikely: .red
+        }
+    }
+}
+
+// MARK: - Timeline
+
+/// The XI over the next three seasons: who is still under contract, a year older each season.
+struct SquadTimelineView: View {
+    @Binding var picked: UInt32?
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        let plans = store.squadTimeline
+        ScrollView([.vertical, .horizontal]) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Who fills each position as contracts run out and players age. Orange: 31 or older that season. Red: nobody left who plays there.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+                    GridRow {
+                        Text("Position").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach(plans) { p in
+                            Text(p.label).font(.headline).frame(width: 200, alignment: .leading)
+                        }
+                    }
+                    Divider().gridCellUnsizedAxes(.horizontal)
+                    ForEach(store.workingFormation.slots) { slot in
+                        GridRow {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(slot.label).font(.callout.weight(.semibold))
+                                Text(slot.role).font(.caption2).foregroundStyle(.secondary)
+                            }
+                            .frame(width: 70, alignment: .leading)
+                            ForEach(plans) { p in
+                                cell(p.report.slots.first { $0.slot.label == slot.label })
+                            }
+                        }
+                    }
+                    Divider().gridCellUnsizedAxes(.horizontal)
+                    GridRow(alignment: .top) {
+                        Text("Leaving").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach(plans) { p in
+                            VStack(alignment: .leading, spacing: 3) {
+                                if p.leaving.isEmpty { Text("Nobody").foregroundStyle(.secondary) }
+                                ForEach(p.leaving.prefix(12), id: \.id) { r in
+                                    Button { picked = r.id } label: {
+                                        Text("\(r.name) · \(r.age)").lineLimit(1)
+                                    }
+                                    .buttonStyle(.link)
+                                }
+                                if p.leaving.count > 12 { Text("+\(p.leaving.count - 12) more").foregroundStyle(.secondary) }
+                            }
+                            .font(.callout)
+                            .frame(width: 200, alignment: .leading)
+                        }
+                    }
+                }
+                .fmCard()
+            }
+            .padding(12)
+        }
+    }
+
+    @ViewBuilder private func cell(_ a: SlotAnalysis?) -> some View {
+        if let a, let s = a.starter {
+            let old = s.age >= 31
+            Button { picked = s.id } label: {
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 2).fill(old ? Color.orange : Color.green).frame(width: 4, height: 26)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(s.name).lineLimit(1).foregroundStyle(.primary)
+                        HStack(spacing: 6) {
+                            Text("\(s.age)").foregroundStyle(old ? Color.orange : Color.secondary)
+                            Text(String(format: "%.1f", a.starterScore))
+                                .foregroundStyle(AttrColor.color(Int(a.starterScore.rounded())))
+                            if let e = s.person.exp, !e.isEmpty { Text("to \(e.prefix(4))").foregroundStyle(.tertiary) }
+                        }
+                        .font(.caption).monospacedDigit()
+                    }
+                }
+                .frame(width: 200, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 2).fill(Color.red).frame(width: 4, height: 26)
+                Text("Nobody").foregroundStyle(.red)
+            }
+            .frame(width: 200, alignment: .leading)
         }
     }
 }

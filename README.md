@@ -1,5 +1,7 @@
 # Pitchside
 
+<img src="docs/icon.png" width="96" align="right" alt="Pitchside icon">
+
 **A free, open-source scouting tool for Football Manager on Apple Silicon Macs.** It's in the spirit of
 Genie Scout on Windows. Search every player and staff member in your save, see their real attributes,
 hidden attributes and potential, and plan your squad.
@@ -20,12 +22,16 @@ hidden attributes and potential, and plan your squad.
   player, squad, signings and growth tables, sort by it, and drag column headers to reorder them.
 - **Right-click to copy** a player's name, ready to paste into FM's search.
 - **Search suggestions** for clubs, nationalities and divisions as you type.
+- **Red and green flags** on every profile ("Injury prone", "Model professional", "Big-match player"),
+  and a **development outlook** for young players: the ability they're likely to reach, not just their potential.
 - **Player profiles:** all attributes with FM-style colours, hidden attributes, personality, positions
   on a pitch, best roles and star ratings.
 - **Squad builder:** pick your club (men's or women's side) and a formation, or build your own with any
   position and role. It shows where your squad is thin, old or out of contract, and lists signings
   that would improve each position within your budget. **My squad** lists everyone at your club with
-  their place in your XI.
+  their place in your XI, and **Timeline** shows the XI over the next three seasons as contracts end
+  and players age. First team, youth and reserve teams can be viewed separately.
+- **Staff recommendations:** your weakest coaching, scouting and medical areas, with affordable upgrades.
 - **Player interest estimate:** how keen each player is likely to be to join your club, graded
   Interested, Persuadable, Doubtful or Unlikely.
 - **Growth & regens:** compare scans over time to find the biggest risers and newly generated players.
@@ -78,7 +84,7 @@ hidden attributes and potential, and plan your squad.
 
 **First start:** launch FM from Steam as usual. The first start takes a few minutes, and the game may
 close once on its own while BepInEx prepares itself. Just start it again. To check it worked, open
-`BepInEx/LogOutput.log` in the game folder. It should contain `Pitchside 0.3.0 loaded`.
+`BepInEx/LogOutput.log` in the game folder. It should contain `Pitchside 0.4.0 loaded`.
 
 ## Use
 

@@ -8,6 +8,8 @@ internal sealed class Request
     public long At { get; set; }                       // ms since epoch; stale requests are ignored
     public string Database { get; set; } = "men";     // men | women | both
     public List<Target> Targets { get; set; } = new();
+    /// <summary>Optional: also write clubprobe.txt for this club (teams, contracts, staff, date candidates).</summary>
+    public string Club { get; set; }
 }
 
 /// <summary>A person you can see in-game, used to locate fields in memory.</summary>

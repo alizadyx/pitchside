@@ -11,16 +11,16 @@ namespace Pitchside;
 /// (vtable offset-to-top in offsets.json), reads every player and staff member and
 /// writes export.json for the viewer app.
 /// </summary>
-internal static class Dumper
+internal static partial class Dumper
 {
     private sealed class Rec
     {
         public uint Uid;
         public bool IsPlayer;
         public string Name, Surname, Nation, Club, Division, Dob, Expires, Foot;
-        public int Ca, Pa, Height, Job, Gender, CurRep, WorldRep, StatusFlags;
+        public int Ca, Pa, Height, Job, Gender, CurRep, WorldRep, StatusFlags, TeamRep;
         public long Value = -1, Asking = -1, Wage = -1;
-        public ulong PersonAddr;
+        public ulong PersonAddr, ContractAddr, TeamAddr;
         public int Sub;
         public byte[] Attrs, Hidden, Personality, Positions, StaffAttrs;
     }
@@ -128,6 +128,7 @@ internal static class Dumper
 
         WriteExport(cfg, players.Values, staff.Values, gameDate, warnings, sw.ElapsedMilliseconds);
         WriteProbe(mem, cfg, req, players.Values.Concat(staff.Values));
+        if (!string.IsNullOrWhiteSpace(req.Club)) WriteClubProbe(mem, cfg, req.Club.Trim(), players.Values, staff.Values);
         WriteDiagnostics(mem, cfg, vtCounts, players.Count, staff.Count, skippedGender, rejected, unread, sw.ElapsedMilliseconds);
 
         Log.Info($"Scan done: {players.Count:N0} players, {staff.Count:N0} staff in {sw.ElapsedMilliseconds} ms");
@@ -227,10 +228,12 @@ internal static class Dumper
             r.StatusFlags = mem.U8(con + (ulong)c.StatusFlags);
             if (!r.IsPlayer) r.Job = mem.U8(con + (ulong)c.Job);
             ulong team = mem.Ptr(con + (ulong)c.Team);
+            r.ContractAddr = con;
+            r.TeamAddr = team;
             if (team != 0)
             {
                 var t = teams.GetOrAdd(team, tm => ResolveTeam(mem, cfg, tm, dateVotes));
-                r.Club = t.club; r.Division = t.div;
+                r.Club = t.club; r.Division = t.div; r.TeamRep = t.rep;
             }
         }
         if (pe.Club > 0)
@@ -256,7 +259,12 @@ internal static class Dumper
         string name = club == 0 ? null : (mem.FmString(club + (ulong)k.ClubName, false, to) ?? mem.FmString(club + (ulong)k.ClubShortName, false, to));
         ulong comp = mem.Ptr(team + (ulong)k.TeamCompetition);
         string div = comp == 0 ? null : (mem.FmString(comp + (ulong)k.CompName, false, to) ?? mem.FmString(comp + (ulong)k.CompShortName, false, to));
-        ulong sched = mem.Ptr(team + (ulong)k.TeamSchedule);
+        if (k.TeamDate > 0)
+        {
+            uint td = mem.U32(team + (ulong)k.TeamDate);
+            if (FmDate.Decode(td).year is >= 2025 and <= 2080) votes.AddOrUpdate(td, 1, (_, n) => n + 1);
+        }
+        ulong sched = k.TeamSchedule > 0 ? mem.Ptr(team + (ulong)k.TeamSchedule) : 0;
         if (sched != 0)
         {
             uint d = mem.U32(sched + (ulong)k.ScheduleNextMatch);
@@ -349,6 +357,12 @@ internal static class Dumper
         if (r.Nation != null) w.WriteString("nat", r.Nation);
         if (r.Club != null) w.WriteString("club", r.Club);
         if (r.Division != null) w.WriteString("div", r.Division);
+        if (r.TeamAddr != 0)
+        {
+            // Which of the club's teams (first team, U21, U18…) the contract is with.
+            w.WriteNumber("tm", (uint)((r.TeamAddr >> 3) ^ (r.TeamAddr >> 35)));
+            w.WriteNumber("trep", r.TeamRep);
+        }
         w.WriteNumber("ca", r.Ca);
         w.WriteNumber("pa", r.Pa);
         w.WriteNumber("rep", r.CurRep);

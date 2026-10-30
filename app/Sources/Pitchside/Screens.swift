@@ -42,14 +42,16 @@ struct SquadView: View {
     @State private var picked: UInt32?
     @State private var showSave = false
     @State private var saveName = ""
-    /// 0 My tactic, 3 Suggested, 4 Set pieces & captain, 5 Team instructions, 1 My squad, 2 Timeline.
+    /// 0 My tactic, 6 Depth, 3 Suggested, 4 Set pieces & captain, 5 Team instructions, 1 My squad, 2 Timeline.
     @AppStorage("squadMode") private var mode = 0
 
     var body: some View {
         VStack(spacing: 0) {
             controls
             Divider()
-            if store.squadReport != nil && mode == 1 {
+            if store.squadReport != nil && mode == 6 {
+                DepthView(picked: $picked)
+            } else if store.squadReport != nil && mode == 1 {
                 MySquadView(picked: $picked)
             } else if store.squadReport != nil && mode == 2 {
                 SquadTimelineView(picked: $picked)
@@ -113,6 +115,7 @@ struct SquadView: View {
                 }
                 Picker("View", selection: $mode) {
                     Text("My tactic").tag(0)
+                    Text("Depth").tag(6)
                     Text("Suggested").tag(3)
                     Text("Set pieces").tag(4)
                     Text("Instructions").tag(5)
@@ -122,7 +125,7 @@ struct SquadView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help("My tactic: your formation and roles, how your squad fits and who to sign. Suggested: the shapes that suit your squad best. Set pieces & captain, team instructions, everyone at the club, and the next three seasons.")
+                .help("My tactic: your formation and roles, how your squad fits and who to sign. Depth: everyone who can play each position. Suggested: the shapes that suit your squad best. Set pieces & captain, team instructions, everyone at the club, and the next three seasons.")
                 if store.clubTeams.count > 1 {
                     Picker("Squad", selection: $store.squadTeamRank) {
                         ForEach(store.clubTeams) { t in Text("\(t.label) (\(t.count))").tag(t.rank) }

@@ -454,6 +454,38 @@ public enum SquadBuilder {
         .prefix(limit).map { $0 }
     }
 
+    /// One position of the depth chart: everyone in the squad who can play there, best first.
+    public struct DepthSlot: Sendable, Identifiable {
+        public var id: String { slot.label }
+        public let slot: Slot
+        public let options: [Option]
+    }
+
+    /// Familiarity from which a player counts as a natural in a position (below: accomplished).
+    public static let naturalFamiliarity: UInt8 = 15
+
+    /// The formation as a depth chart, one row per line from attack down to the keeper, left to
+    /// right within a line. Each position lists the squad's players who can play there, scored
+    /// for that position's IP and OOP roles.
+    public static func depthChart(_ report: SquadReport, meta: ExportMeta, naturalOnly: Bool = false,
+                                  limit: Int = 5) -> [[DepthSlot]] {
+        let points = PitchLayout.points(for: report.slots.map(\.slot))
+        let lines: [Set<String>] = [["ST"], ["AML", "AMC", "AMR"], ["ML", "MC", "MR"], ["WBL", "DM", "WBR"],
+                                    ["DL", "DC", "DR", "SW"], ["GK"]]
+        return lines.compactMap { line in
+            let row = report.slots
+                .filter { line.contains($0.slot.position) }
+                .sorted { (points[$0.slot.label]?.x ?? 0.5) < (points[$1.slot.label]?.x ?? 0.5) }
+                .map { a in
+                    DepthSlot(slot: a.slot, options: Array(
+                        options(for: a.slot, squad: report.squad, meta: meta, limit: .max)
+                            .filter { !naturalOnly || $0.familiarity >= naturalFamiliarity }
+                            .prefix(limit)))
+                }
+            return row.isEmpty ? nil : row
+        }
+    }
+
     /// A player's clearly better roles at a slot (0.5 or more above the roles set there), if any.
     public static func betterRoles(for r: PlayerRow, at slot: Slot) -> (ip: (code: String, score: Double)?, oop: (code: String, score: Double)?) {
         func best(_ roles: [Role], current: String) -> (code: String, score: Double)? {

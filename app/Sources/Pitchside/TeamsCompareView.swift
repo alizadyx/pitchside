@@ -63,6 +63,26 @@ enum MetricText {
         m.attributeScale ? AttrColor.color(Int(v.rounded())) : .primary
     }
 
+    /// Green for the top quarter of the league, red for the bottom quarter.
+    static func rankColor(_ standing: Double?) -> Color {
+        guard let s = standing else { return .primary }
+        return s <= 0.25 ? .green : s >= 0.75 ? .red : .primary
+    }
+
+    /// Difference from the league average, signed (+ = more).
+    static func diff(_ m: TeamCompare.Metric, _ v: Double, _ avg: Double, store: Store) -> String {
+        let d = v - avg
+        switch m.id {
+        case "wages", "value": return (d >= 0 ? "+" : "−") + MetricText.format(m, abs(d), store: store)
+        default: return String(format: "%+.\(m.decimals)f", d).replacingOccurrences(of: "-", with: "−")
+        }
+    }
+
+    static func ordinal(_ n: Int) -> String {
+        let suffix = (11...13).contains(n % 100) ? "th" : n % 10 == 1 ? "st" : n % 10 == 2 ? "nd" : n % 10 == 3 ? "rd" : "th"
+        return "\(n)\(suffix)"
+    }
+
     /// Green when `a` is clearly better than `b` on this metric, red when clearly worse.
     static func diffColor(_ m: TeamCompare.Metric, _ a: Double, _ b: Double) -> Color {
         let d = m.higherIsBetter ? a - b : b - a
@@ -107,7 +127,8 @@ struct TeamRadar: View {
     var body: some View {
         let ids = TeamCompare.radarIDs
         VStack(alignment: .leading, spacing: 6) {
-            RadarChart(axes: ids.map { TeamCompare.metric($0)?.short ?? $0 },
+            RadarChart(axes: ids.map { id in
+                (TeamCompare.metric(id)?.title ?? id).components(separatedBy: " (").first ?? id },
                        series: series.map { s in ids.map { s.1[$0] ?? 0 } })
                 .frame(minWidth: 280, minHeight: 280)
                 .aspectRatio(1, contentMode: .fit)
@@ -127,9 +148,11 @@ struct TeamRadar: View {
 
 private struct LeaguePane: View {
     @Environment(Store.self) private var store
+    @State private var country = ""
     @State private var league = ""
     @State private var sortID = "level"
     @State private var selected = ""
+    @AppStorage("leagueVsAverage") private var vsAverage = false
     static let columns = ["level", "depth", "ca", "gk", "def", "mid", "att", "technique", "pace", "work", "aerial",
                           "setpieces", "age", "wages"]
 
@@ -139,14 +162,26 @@ private struct LeaguePane: View {
         let avg = TeamCompare.average(profiles)
         HSplitView {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Picker("League", selection: $league) {
-                        ForEach(store.leagues, id: \.self) { Text($0).tag($0) }
+                HStack(spacing: 12) {
+                    Picker("Country", selection: $country) {
+                        ForEach(store.leagueMap.countries, id: \.self) { Text($0).tag($0) }
                     }
-                    .frame(maxWidth: 360)
+                    .frame(maxWidth: 230)
+                    Picker("League", selection: $league) {
+                        ForEach(store.leagueMap.leagues(in: country), id: \.self) { Text($0).tag($0) }
+                    }
+                    .frame(maxWidth: 300)
                     Text("\(profiles.count) of \(clubs.count) clubs").foregroundStyle(.secondary)
                     Spacer()
+                    Picker("", selection: $vsAverage) {
+                        Text("Values").tag(false)
+                        Text("vs league average").tag(true)
+                    }
+                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    .help("Show each club's numbers, or how far above (+) or below (−) the league average they are")
                 }
+                Text("Green: top quarter of this league · red: bottom quarter. Hover a column name or a number for what it means. On the 1–20 scale one point is a big gap (about 15–20 CA).")
+                    .font(.caption).foregroundStyle(.secondary)
                 table(profiles, avg: avg)
             }
             .padding(12)
@@ -154,21 +189,47 @@ private struct LeaguePane: View {
             detail(profiles, avg: avg).frame(minWidth: 330, idealWidth: 380, maxWidth: 460)
         }
         .onAppear {
-            if league.isEmpty { league = store.myLeague ?? store.leagues.first ?? "" }
+            pickDefaults()
             if selected.isEmpty { selected = store.myClub }
             store.ensureProfiles(store.clubs(inLeague: league))
+        }
+        .onChange(of: country) { _, c in
+            let ls = store.leagueMap.leagues(in: c)
+            if !ls.contains(league) { league = (store.myCountry == c ? store.myLeague : nil) ?? ls.first ?? "" }
         }
         .onChange(of: league) { _, l in store.ensureProfiles(store.clubs(inLeague: l)) }
         .onChange(of: store.compareBasis) { store.ensureProfiles(store.clubs(inLeague: league)) }
         .onChange(of: store.clubLeague.count) {
-            if league.isEmpty { league = store.myLeague ?? store.leagues.first ?? "" }
+            pickDefaults()
             store.ensureProfiles(store.clubs(inLeague: league))
+        }
+    }
+
+    private func pickDefaults() {
+        let map = store.leagueMap
+        if country.isEmpty || !map.countries.contains(country) {
+            country = store.myCountry ?? map.countries.first ?? ""
+        }
+        if league.isEmpty || map.country[league] != country {
+            league = (store.myCountry == country ? store.myLeague : nil) ?? map.leagues(in: country).first ?? ""
         }
     }
 
     private func sorted(_ ps: [TeamCompare.TeamProfile]) -> [TeamCompare.TeamProfile] {
         guard let m = TeamCompare.metric(sortID) else { return ps }
         return ps.sorted { m.higherIsBetter ? $0[m.id] > $1[m.id] : $0[m.id] < $1[m.id] }
+    }
+
+    private func cellText(_ m: TeamCompare.Metric, _ p: TeamCompare.TeamProfile, avg: [String: Double]) -> String {
+        vsAverage ? MetricText.diff(m, p[m.id], avg[m.id] ?? 0, store: store) : MetricText.format(m, p[m.id], store: store)
+    }
+
+    private func cellHelp(_ m: TeamCompare.Metric, _ p: TeamCompare.TeamProfile, profiles: [TeamCompare.TeamProfile],
+                          avg: [String: Double]) -> String {
+        let better = profiles.filter { m.higherIsBetter ? $0[m.id] > p[m.id] : $0[m.id] < p[m.id] }.count
+        return "\(p.club) · \(m.title): \(MetricText.format(m, p[m.id], store: store)) — "
+            + "\(MetricText.ordinal(better + 1)) of \(profiles.count), league average \(MetricText.format(m, avg[m.id] ?? 0, store: store))\n\n"
+            + m.explanation
     }
 
     private func table(_ profiles: [TeamCompare.TeamProfile], avg: [String: Double]) -> some View {
@@ -179,12 +240,14 @@ private struct LeaguePane: View {
                     Text("#").foregroundStyle(.secondary)
                     Text("Club").font(.caption.weight(.semibold))
                     Text("Shape").font(.caption.weight(.semibold))
+                        .help("The formation that gets the most out of this squad")
                     ForEach(metrics) { m in
                         Button { sortID = m.id } label: {
                             Text(m.short + (sortID == m.id ? " ▾" : "")).font(.caption.weight(.semibold))
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help(m.title)
+                        .help(m.explanation + "\n\nClick to sort.")
                     }
                 }
                 Divider().gridCellUnsizedAxes(.horizontal)
@@ -197,10 +260,12 @@ private struct LeaguePane: View {
                         }
                         .buttonStyle(.plain)
                         .frame(minWidth: 150, alignment: .leading)
-                        Text(p.formation).foregroundStyle(.secondary).font(.caption)
+                        .help(p.club)
+                        Text(p.formation).foregroundStyle(.secondary).font(.caption).help(p.formation)
                         ForEach(metrics) { m in
-                            Text(MetricText.format(m, p[m.id], store: store)).monospacedDigit()
-                                .foregroundStyle(MetricText.color(m, p[m.id]))
+                            Text(cellText(m, p, avg: avg)).monospacedDigit()
+                                .foregroundStyle(MetricText.rankColor(TeamCompare.standing(p[m.id], metric: m, in: profiles)))
+                                .help(cellHelp(m, p, profiles: profiles, avg: avg))
                         }
                     }
                     .padding(.vertical, 1)
@@ -213,6 +278,7 @@ private struct LeaguePane: View {
                     Text("")
                     ForEach(metrics) { m in
                         Text(MetricText.format(m, avg[m.id] ?? 0, store: store)).monospacedDigit().foregroundStyle(.secondary)
+                            .help("League average \(m.title): \(MetricText.format(m, avg[m.id] ?? 0, store: store))")
                     }
                 }
             }
@@ -339,7 +405,7 @@ struct CompareTable: View {
             Divider().gridCellUnsizedAxes(.horizontal)
             ForEach(TeamCompare.metrics) { m in
                 GridRow {
-                    Text(m.title).font(.callout).foregroundStyle(.secondary)
+                    Text(m.title).font(.callout).foregroundStyle(.secondary).help(m.explanation)
                     ForEach(Array(columns.enumerated()), id: \.offset) { i, c in
                         let v = c.1[m.id] ?? 0
                         Text(MetricText.format(m, v, store: store)).monospacedDigit()

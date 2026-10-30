@@ -34,7 +34,36 @@ public enum TeamCompare {
         public let decimals: Int
         /// On FM's 1–20 scale (can go on the radar).
         public let attributeScale: Bool
+        /// Plain-English explanation, shown when hovering a column.
+        public var explanation: String { TeamCompare.explanations[id] ?? title }
     }
+
+    static let explanations: [String: String] = [
+        "level": "XI level: average role score (1–20) of the best eleven in their best shape, IP and OOP roles together — the same score as in Tactics. About 1 point is a big gap (roughly 15–20 CA).",
+        "depth": "Depth: average role score of the best backup for each of the eleven positions.",
+        "ca": "Average Current Ability of the players being compared (0–200).",
+        "pa": "Average Potential Ability of the players being compared (0–200).",
+        "meta": "Meta score: how strong the players are on the attributes the match engine rewards most (pace, acceleration, anticipation and so on).",
+        "gk": "Goalkeeper: role score of the starting keeper.",
+        "def": "Defence: average role score of the starting full backs, wing backs and centre backs.",
+        "mid": "Midfield: average role score of the starting defensive, central and wide midfielders.",
+        "att": "Attack: average role score of the starting attacking midfielders, wingers and strikers.",
+        "technique": "Technique: average of Passing, First Touch, Technique, Composure, Vision and Decisions (outfield players).",
+        "pace": "Pace: average of Pace and Acceleration (outfield players).",
+        "work": "Work: work rate and pressing — average of Work Rate, Stamina, Teamwork and Natural Fitness (outfield players).",
+        "physical": "Physical: average of Strength, Jumping Reach and Balance (outfield players).",
+        "aerial": "Air: aerial threat — Heading and Jumping Reach of the three best headers in the team.",
+        "setpieces": "SP: set pieces — how good the best takers are: corners (Corners + Crossing), free kicks (Free Kicks + Technique) and penalties (Penalty Taking + Composure).",
+        "mental": "Mental strength: Determination, Composure, Concentration, Decisions and the Pressure personality trait (outfield players).",
+        "age": "Average age of the starting eleven.",
+        "old": "Number of starters aged 30 or over.",
+        "young": "Number of starters aged 23 or under.",
+        "size": "Number of players in the squad being compared.",
+        "close": "Near: players within 1.5 of the XI level — how many could step in without a big drop.",
+        "expiring": "Exp: starters whose contracts end by next summer.",
+        "wages": "Wages: weekly wage bill of the squad.",
+        "value": "Value: total transfer value of the squad.",
+    ]
 
     public static let metrics: [Metric] = [
         Metric(id: "level", title: "XI level", short: "Level", group: "Overall", higherIsBetter: true, decimals: 1, attributeScale: true),
@@ -161,14 +190,62 @@ public enum TeamCompare {
                            players: measured, tactical: TacticsAdvisor.profile(fit, meta: meta))
     }
 
-    /// Clubs whose first team plays in `division` (one gender's rows).
+    /// Where every club plays and what every league looks like, worked out from the players.
+    public struct LeagueMap: Sendable {
+        /// club → its senior league: the division of its highest-reputation team.
+        public var clubLeague: [String: String] = [:]
+        /// league → country (the most common nationality among its players).
+        public var country: [String: String] = [:]
+        /// league → average CA of its clubs' players, to list top divisions first.
+        public var strength: [String: Double] = [:]
+        public init() {}
+
+        public var countries: [String] { Array(Set(clubLeague.values.compactMap { country[$0] })).sorted() }
+        /// Leagues of a country, strongest first.
+        public func leagues(in c: String) -> [String] {
+            Array(Set(clubLeague.values.filter { country[$0] == c })).sorted { (strength[$0] ?? 0) > (strength[$1] ?? 0) }
+        }
+        public func clubs(in league: String) -> [String] { clubLeague.filter { $0.value == league }.map(\.key).sorted() }
+    }
+
+    public static func leagueMap(_ rows: [PlayerRow]) -> LeagueMap {
+        // Per club and division: highest team reputation and player count.
+        var perClub: [String: [String: (rep: Int, n: Int)]] = [:]
+        var nats: [String: [String: Int]] = [:]
+        var ca: [String: (sum: Int, n: Int)] = [:]
+        for r in rows {
+            guard let c = r.person.club, let d = r.person.div, !d.isEmpty else { continue }
+            var e = perClub[c, default: [:]][d] ?? (0, 0)
+            e.rep = max(e.rep, r.person.trep ?? 0); e.n += 1
+            perClub[c, default: [:]][d] = e
+            if let nat = r.person.nat, !nat.isEmpty { nats[d, default: [:]][nat, default: 0] += 1 }
+        }
+        var m = LeagueMap()
+        for (club, divs) in perClub {
+            m.clubLeague[club] = divs.max { a, b in a.value.rep != b.value.rep ? a.value.rep < b.value.rep : a.value.n < b.value.n }?.key
+        }
+        let senior = Set(m.clubLeague.values)
+        for r in rows {
+            guard let c = r.person.club, let d = m.clubLeague[c], r.person.div == d else { continue }
+            var e = ca[d] ?? (0, 0); e.sum += r.ca; e.n += 1; ca[d] = e
+        }
+        for d in senior {
+            m.country[d] = nats[d]?.max { a, b in a.value < b.value }?.key ?? "Other"
+            if let e = ca[d], e.n > 0 { m.strength[d] = Double(e.sum) / Double(e.n) }
+        }
+        return m
+    }
+
+    /// Clubs whose senior team plays in `division` (one gender's rows).
     public static func clubs(in division: String, rows: [PlayerRow]) -> [String] {
-        var count: [String: [String: Int]] = [:]
-        for r in rows { if let c = r.person.club, let d = r.person.div { count[c, default: [:]][d, default: 0] += 1 } }
-        return count.compactMap { club, divs in
-            // A club's main division: where most of its players are registered.
-            divs.max { $0.value < $1.value }?.key == division ? club : nil
-        }.sorted()
+        leagueMap(rows).clubs(in: division)
+    }
+
+    /// Where a club ranks for a metric in `profiles`, as a share: 0 = best, 1 = worst.
+    public static func standing(_ value: Double, metric: Metric, in profiles: [TeamProfile]) -> Double? {
+        guard profiles.count >= 3 else { return nil }
+        let better = profiles.filter { metric.higherIsBetter ? $0[metric.id] > value : $0[metric.id] < value }.count
+        return Double(better) / Double(profiles.count - 1)
     }
 
     public static func league(_ division: String, rows: [PlayerRow], meta: ExportMeta, basis: Basis,

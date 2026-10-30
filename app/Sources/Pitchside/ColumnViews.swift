@@ -47,9 +47,9 @@ struct StatCell: View {
 
     var body: some View {
         if column.isAttribute {
-            AttrBox(value: Int(store.statValue(column, row) ?? 0))
+            AttrBox(value: Int(store.statValue(column, row) ?? 0)).help(column.title)
         } else {
-            general
+            general.help(column.title)
         }
     }
 

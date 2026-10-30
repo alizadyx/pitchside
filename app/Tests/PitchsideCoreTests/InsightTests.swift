@@ -96,6 +96,28 @@ final class InsightTests: XCTestCase {
         XCTAssertEqual(SquadBuilder.members(of: teams[1], club: "Old Scan FC", rows: r).count, 16)
     }
 
+    func testLeagueMap() {
+        var t = Factory()
+        var people: [Person] = []
+        func add(_ club: String, _ div: String, _ nat: String, _ level: UInt8, rep: Int, n: Int) {
+            for i in 0..<n {
+                var p = t.make("\(club) \(div) \(i)", club: club, pos: ["MC"], level: level, age: 25)
+                p.div = div; p.nat = nat; p.trep = rep
+                people.append(p)
+            }
+        }
+        add("Big FC", "Top League", "England", 15, rep: 8000, n: 20)
+        add("Big FC", "U18 League", "England", 7, rep: 1000, n: 30)     // more youth players than seniors
+        add("Small FC", "Second League", "England", 11, rep: 4000, n: 20)
+        add("Other FC", "Top League", "England", 14, rep: 7000, n: 20)
+        add("Paris FC", "French League", "France", 13, rep: 6000, n: 20)
+        let m = TeamCompare.leagueMap(rows(people))
+        XCTAssertEqual(m.clubLeague["Big FC"], "Top League", "senior team decides, not the biggest group")
+        XCTAssertEqual(m.countries, ["England", "France"])
+        XCTAssertEqual(m.leagues(in: "England"), ["Top League", "Second League"], "strongest first")
+        XCTAssertEqual(m.clubs(in: "Top League"), ["Big FC", "Other FC"])
+    }
+
     func testStaffAdvice() {
         func person(_ id: UInt32, _ name: String, club: String?, _ s: [UInt8], wage: Int?, job: String,
                     trep: Int? = nil) -> Person {

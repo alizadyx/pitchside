@@ -28,11 +28,13 @@ hidden attributes and potential, and plan your squad.
   free-kick and penalty takers, aerial targets, who stays back and captains; **Instructions** suggests a
   mentality, style and team instructions with the attributes behind each, against your squad and your
   league. **My squad** and **Timeline** split by first team, U21 and U18, and show what the whole club's
-  best XI would be, naming youngsters who'd start.
-- **Compare teams:** your league as a sortable table (XI level, depth, CA/PA, each line, technique,
+  best XI would be, naming youngsters who'd start. **Depth** lays your formation out as a depth chart:
+  every position lists the players in your squad who can play there, best first.
+- **Compare teams:** pick a country, then a league, and see it as a sortable table (XI level, depth, CA/PA, each line, technique,
   pace, work rate, aerial threat, set pieces, age, wages) with a radar against the league average and
   the top club; any two clubs head to head; or one club against the average of up to five. Judge clubs
-  on their first-team XI, the best XI at the whole club, or their top 18.
+  on their first-team XI, the best XI at the whole club, or their top 18. Cells are coloured by rank in
+  the league, can show the difference from the league average, and explain themselves on hover.
 - **Your own columns:** add any stat, attribute, hidden attribute or personality trait as a column to the
   player, squad, signings and growth tables, sort by it, and drag column headers to reorder them.
 - **Right-click to copy** a player's name, ready to paste into FM's search.

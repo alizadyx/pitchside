@@ -767,11 +767,13 @@ final class Store {
         didSet { UserDefaults.standard.set(compareBasis, forKey: "compareBasis"); refreshLeague() }
     }
     var basis: TeamCompare.Basis { TeamCompare.Basis(rawValue: compareBasis) ?? .firstTeam }
-    /// club → the division most of its players are registered in (current men's/women's side).
-    private(set) var clubLeague: [String: String] = [:]
+    /// Where every club plays, each league's country and strength (current men's/women's side).
+    private(set) var leagueMap = TeamCompare.LeagueMap()
     private var clubLeagueKey = ""
+    var clubLeague: [String: String] { leagueMap.clubLeague }
     var leagues: [String] { Array(Set(clubLeague.values)).sorted() }
     var myLeague: String? { clubLeague[myClub] }
+    var myCountry: String? { myLeague.flatMap { leagueMap.country[$0] } }
     private(set) var profileCache: [String: TeamCompare.TeamProfile] = [:]
     private(set) var compareJobs = 0
     var compareBusy: Bool { compareJobs > 0 }
@@ -780,7 +782,7 @@ final class Store {
 
     private func cacheKey(_ club: String) -> String { "\(compareBasis)|\(squadWomen)|\(club)" }
     func profile(_ club: String) -> TeamCompare.TeamProfile? { profileCache[cacheKey(club)] }
-    func clubs(inLeague league: String) -> [String] { clubLeague.filter { $0.value == league }.map(\.key).sorted() }
+    func clubs(inLeague league: String) -> [String] { leagueMap.clubs(in: league) }
 
     /// Works out profiles for `clubs` in the background (cached per basis and side).
     func ensureProfiles(_ clubs: [String]) {
@@ -817,10 +819,8 @@ final class Store {
             profileCache = [:]
             let rows = teamRows
             Task.detached(priority: .utility) {
-                var count: [String: [String: Int]] = [:]
-                for r in rows { if let c = r.person.club, let d = r.person.div, !d.isEmpty { count[c, default: [:]][d, default: 0] += 1 } }
-                let main = count.compactMapValues { divs in divs.max { a, b in a.value < b.value }?.key }
-                await MainActor.run { self.clubLeague = main; self.refreshLeague() }
+                let map = TeamCompare.leagueMap(rows)
+                await MainActor.run { self.leagueMap = map; self.refreshLeague() }
             }
             return
         }

@@ -95,7 +95,7 @@ struct StaffView: View {
                         TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                         TableColumn(AttributeGroups.label(store.staffColumnKey), value: \.selectedAttr) { r in
                             HStack(spacing: 6) {
-                                AttrBox(value: r.selectedAttr)
+                                AttrBox(value: r.selectedAttr).help(AttributeGroups.label(store.staffColumnKey))
                                 Text(r.selectedAttr > 0 ? AttributeGroups.staffWord(r.selectedAttr) : "")
                                     .foregroundStyle(.secondary).lineLimit(1)
                             }

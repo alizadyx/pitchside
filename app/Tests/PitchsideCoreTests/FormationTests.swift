@@ -66,4 +66,39 @@ final class FormationTests: XCTestCase {
                                          meta: meta, season: 2026)
         XCTAssertEqual(women.squad.count, 2)
     }
+
+    func testDepthChartListsWhoCanPlayEachPosition() {
+        var t = Factory()
+        var people = t.homeSquad()
+        var backup = t.make("Backup Striker", club: "Home FC", pos: ["ST"], level: 12)
+        backup.pos?[Factory.posKeys.firstIndex(of: "AMC")!] = 13       // accomplished, not natural
+        people.append(backup)
+        let meta = ExportMeta(scannedAt: nil, gameDate: nil, offsetsVersion: nil, offsetsVerified: nil, plugin: nil,
+                              scanMs: nil, playerAttrKeys: SquadTests.attrKeys, hiddenKeys: [],
+                              personalityKeys: ["Adaptability", "Ambition", "Loyalty", "Pressure"],
+                              positionKeys: SquadTests.posKeys, staffAttrKeys: [], warnings: nil)
+        let rows = RowBuilder.players(people, meta: meta, reference: Ages.date("2026-07-13")!, shortlist: [],
+                                      growth: [:], previousIds: nil)
+        let f = Formations.all.first { $0.name == "4-2-3-1" }!
+        let report = SquadBuilder.analyse(club: "Home FC", formation: f, rows: rows, meta: meta, season: 2026)
+        let chart = SquadBuilder.depthChart(report, meta: meta)
+        XCTAssertEqual(chart.first?.map(\.slot.position), ["ST"], "attack at the top")
+        XCTAssertEqual(chart.last?.map(\.slot.position), ["GK"], "keeper at the bottom")
+        XCTAssertEqual(chart.flatMap { $0 }.count, 11)
+        let st = chart.first!.first!
+        XCTAssertTrue(st.options.contains { $0.row.name == "Backup Striker" })
+        XCTAssertTrue(st.options.allSatisfy { $0.row.person.pos?[Factory.posKeys.firstIndex(of: "ST")!] ?? 0 >= 12 })
+        XCTAssertEqual(st.options.map(\.score), st.options.map(\.score).sorted(by: >), "best first")
+        for line in chart {
+            let xs = line.map { PitchLayout.points(for: report.slots.map(\.slot))[$0.slot.label]!.x }
+            XCTAssertEqual(xs, xs.sorted(), "left to right")
+        }
+        let natural = SquadBuilder.depthChart(report, meta: meta, naturalOnly: true)
+        let amcEveryone = SquadBuilder.depthChart(report, meta: meta, limit: 30).flatMap { $0 }
+            .filter { $0.slot.position == "AMC" }.flatMap(\.options)
+        XCTAssertTrue(amcEveryone.contains { $0.row.name == "Backup Striker" }, "accomplished players count by default")
+        let amc = natural.flatMap { $0 }.filter { $0.slot.position == "AMC" }.flatMap(\.options)
+        XCTAssertFalse(amc.contains { $0.row.name == "Backup Striker" })
+        XCTAssertTrue(SquadBuilder.depthChart(report, meta: meta, limit: 1).flatMap { $0 }.allSatisfy { $0.options.count <= 1 })
+    }
 }

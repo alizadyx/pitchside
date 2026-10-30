@@ -18,7 +18,7 @@ internal static partial class Dumper
         public uint Uid;
         public bool IsPlayer;
         public string Name, Surname, Nation, Club, Division, Dob, Expires, Foot;
-        public int Ca, Pa, Height, Job, Gender, CurRep, WorldRep, StatusFlags, TeamRep;
+        public int Ca, Pa, Height, Job, Gender, CurRep, WorldRep, StatusFlags, TeamRep, TeamAge;
         public long Value = -1, Asking = -1, Wage = -1;
         public ulong PersonAddr, ContractAddr, TeamAddr;
         public int Sub;
@@ -51,8 +51,9 @@ internal static partial class Dumper
         var players = new ConcurrentDictionary<uint, Rec>();
         var staff = new ConcurrentDictionary<uint, Rec>();
         var nationCache = new ConcurrentDictionary<ulong, string>();
-        var teamCache = new ConcurrentDictionary<ulong, (string club, string div, int rep)>();
+        var teamCache = new ConcurrentDictionary<ulong, (string club, string div, int rep, int age)>();
         var dateVotes = new ConcurrentDictionary<uint, int>();
+        var signedVotes = new ConcurrentDictionary<uint, int>();
         var vtCounts = new Dictionary<ulong, long>[Memory.Workers];
         for (int i = 0; i < vtCounts.Length; i++) vtCounts[i] = new();
         long skippedGender = 0, rejected = 0;
@@ -102,7 +103,7 @@ internal static partial class Dumper
                 r.PersonAddr = person;
                 r.Sub = sub;
                 r.Gender = female ? 1 : 0;
-                ReadPersonCommon(mem, cfg, r, blk, person, sub, nationCache, teamCache, dateVotes);
+                ReadPersonCommon(mem, cfg, r, blk, person, sub, nationCache, teamCache, dateVotes, signedVotes);
                 if (string.IsNullOrEmpty(r.Name)) { Interlocked.Increment(ref rejected); continue; }
                 (isPlayer ? players : staff).TryAdd(uid, r);
             }
@@ -111,8 +112,12 @@ internal static partial class Dumper
 
         foreach (var uid in players.Keys) staff.TryRemove(uid, out _);   // player-coaches: keep as player
 
+        // In-game date: the most recent contract signing (several players sign or renew every day
+        // somewhere in the world). Needs at least two signings that day so one odd value can't skew it.
         string gameDate = null;
-        if (!dateVotes.IsEmpty)
+        var signed = signedVotes.Where(kv => kv.Value >= 2).Select(kv => kv.Key).DefaultIfEmpty(0u).Max();
+        if (signed != 0) gameDate = FmDate.Iso(signed);
+        if (gameDate == null && !dateVotes.IsEmpty)
         {
             var top = dateVotes.OrderByDescending(kv => kv.Value).First();
             if (top.Value >= 3) gameDate = FmDate.Iso(top.Key);
@@ -192,8 +197,8 @@ internal static partial class Dumper
 
     private static void ReadPersonCommon(Memory mem, Offsets cfg, Rec r, byte[] b, ulong person, int sub,
         ConcurrentDictionary<ulong, string> nations,
-        ConcurrentDictionary<ulong, (string club, string div, int rep)> teams,
-        ConcurrentDictionary<uint, int> dateVotes)
+        ConcurrentDictionary<ulong, (string club, string div, int rep, int age)> teams,
+        ConcurrentDictionary<uint, int> dateVotes, ConcurrentDictionary<uint, int> signedVotes)
     {
         var pe = cfg.Person;
         bool nested = cfg.Strings.Nested;
@@ -226,6 +231,11 @@ internal static partial class Dumper
             r.Expires = FmDate.Iso(mem.U32(con + (ulong)c.Expiry));
             if (r.Expires != null && string.CompareOrdinal(r.Expires, "2000") < 0) r.Expires = null;
             r.StatusFlags = mem.U8(con + (ulong)c.StatusFlags);
+            if (c.Signed > 0)
+            {
+                uint sd = mem.U32(con + (ulong)c.Signed);
+                if (FmDate.Decode(sd).year is >= 2020 and <= 2080) signedVotes.AddOrUpdate(sd, 1, (_, n) => n + 1);
+            }
             if (!r.IsPlayer) r.Job = mem.U8(con + (ulong)c.Job);
             ulong team = mem.Ptr(con + (ulong)c.Team);
             r.ContractAddr = con;
@@ -233,7 +243,7 @@ internal static partial class Dumper
             if (team != 0)
             {
                 var t = teams.GetOrAdd(team, tm => ResolveTeam(mem, cfg, tm, dateVotes));
-                r.Club = t.club; r.Division = t.div; r.TeamRep = t.rep;
+                r.Club = t.club; r.Division = t.div; r.TeamRep = t.rep; r.TeamAge = t.age;
             }
         }
         if (pe.Club > 0)
@@ -250,7 +260,7 @@ internal static partial class Dumper
         }
     }
 
-    private static (string, string, int) ResolveTeam(Memory mem, Offsets cfg, ulong team, ConcurrentDictionary<uint, int> votes)
+    private static (string, string, int, int) ResolveTeam(Memory mem, Offsets cfg, ulong team, ConcurrentDictionary<uint, int> votes)
     {
         var k = cfg.Club;
         int to = cfg.Strings.TextOffset;
@@ -271,7 +281,9 @@ internal static partial class Dumper
             var (y, _) = FmDate.Decode(d);
             if (y is >= 2025 and <= 2080) votes.AddOrUpdate(d, 1, (_, n) => n + 1);
         }
-        return (Plausible(name) ? name : null, Plausible(div) ? div : null, rep is >= 0 and <= 12000 ? rep : 0);
+        int age = k.TeamAgeLimit > 0 ? mem.U8(team + (ulong)k.TeamAgeLimit) : 0;
+        return (Plausible(name) ? name : null, Plausible(div) ? div : null, rep is >= 0 and <= 12000 ? rep : 0,
+                age is >= 14 and <= 100 ? age : 0);
     }
 
     private static bool Plausible(string s)
@@ -362,6 +374,7 @@ internal static partial class Dumper
             // Which of the club's teams (first team, U21, U18…) the contract is with.
             w.WriteNumber("tm", (uint)((r.TeamAddr >> 3) ^ (r.TeamAddr >> 35)));
             w.WriteNumber("trep", r.TeamRep);
+            if (r.TeamAge > 0) w.WriteNumber("tage", r.TeamAge);   // 100 senior, 21 = U21…
         }
         w.WriteNumber("ca", r.Ca);
         w.WriteNumber("pa", r.Pa);

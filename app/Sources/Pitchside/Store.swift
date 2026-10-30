@@ -175,7 +175,9 @@ final class Store {
 
     var season: Int {
         if seasonOverride > 1900 { return seasonOverride }
-        return Calendar(identifier: .gregorian).component(.year, from: referenceDate)
+        // FM seasons start in summer: January–June 2027 is still the 2026/27 season.
+        let c = Calendar(identifier: .gregorian).dateComponents([.year, .month], from: referenceDate)
+        return (c.year ?? 2026) - ((c.month ?? 7) < 7 ? 1 : 0)
     }
 
     // MARK: - Loading

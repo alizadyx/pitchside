@@ -53,7 +53,7 @@ final class InsightTests: XCTestCase {
         people.append(kid)
         let r = rows(people)
         let teams = SquadBuilder.teams(club: "Home FC", rows: r)
-        XCTAssertEqual(teams.map(\.label), ["First team", "U18 League"])
+        XCTAssertEqual(teams.map(\.label), ["First team", "Reserves (U18 League)"], "older scans: no age limits")
         XCTAssertEqual(teams[0].count, 21)
 
         let first = r.filter { $0.person.tm == teams[0].id }
@@ -64,6 +64,19 @@ final class InsightTests: XCTestCase {
         XCTAssertNotNil(plan[0].report.slots.first { $0.slot.label == "ST" }?.starter)
         XCTAssertNil(plan[1].report.slots.first { $0.slot.label == "ST" }?.starter, "gone after his contract ends")
         XCTAssertTrue(plan[2].report.squad.isEmpty, "everyone's 2028 contracts have ended")
+    }
+
+    func testTeamsUseAgeLimits() {
+        var t = Factory()
+        func p(_ name: String, team: UInt32, rep: Int, age: Int) -> Person {
+            var x = t.make(name, club: "Chelsea", pos: ["MC"], level: 10)
+            x.tm = team; x.trep = rep; x.tage = age
+            return x
+        }
+        let r = rows([p("U18 kid", team: 3, rep: 1600, age: 18), p("U21 lad", team: 2, rep: 2800, age: 21),
+                      p("First teamer", team: 1, rep: 8100, age: 100), p("Reserve", team: 4, rep: 3000, age: 100)])
+        XCTAssertEqual(SquadBuilder.teams(club: "Chelsea", rows: r).map(\.label),
+                       ["First team", "Reserves", "U21", "U18"])
     }
 
     func testStaffAdvice() {

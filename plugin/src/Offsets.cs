@@ -137,6 +137,7 @@ internal sealed class Offsets
         public int Expiry { get; set; } = 0x48;         // FM date
         public int Job { get; set; } = 0x26;            // byte
         public int StatusFlags { get; set; } = 0x57;    // bit0 listed, bit3 listed by request, bit4 NFS, bit5 release
+        public int Signed { get; set; } = 0x44;         // FM date the contract was signed (0 = off); latest ≈ today
     }
 
     public sealed class ClubLayout
@@ -146,6 +147,7 @@ internal sealed class Offsets
         public int TeamCompetition { get; set; } = 0x50;
         public int TeamSchedule { get; set; } = 0xA0;   // → schedule object (0 = off)
         public int TeamDate { get; set; } = 0;          // FM date stored directly in the team (0 = off)
+        public int TeamAgeLimit { get; set; } = 0x2C;   // byte: 100 senior, 21 = U21, 18 = U18… (0 = off)
         public int ScheduleNextMatch { get; set; } = 0x94; // FM date ≈ today
         public int ClubName { get; set; } = 0xC0;       // indirect string
         public int ClubShortName { get; set; } = 0xC8;

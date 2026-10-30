@@ -169,6 +169,10 @@ struct StatusBar: View {
             if let m = store.meta {
                 Text("\(store.allPlayers.count.formatted()) players · \(store.allStaff.count.formatted()) staff")
                     .lineLimit(1)
+                if let g = m.gameDate, let d = Ages.date(g) {
+                    Text("· in-game \(d.formatted(.dateTime.day().month(.abbreviated).year()))").lineLimit(1)
+                        .help("Read from the game; ages and contract dates use it")
+                }
                 if let s = m.scannedAt {
                     Text("· scanned \(s.replacingOccurrences(of: "T", with: " ").prefix(16))").lineLimit(1)
                 }

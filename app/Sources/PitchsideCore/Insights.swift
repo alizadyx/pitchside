@@ -95,31 +95,40 @@ public struct ClubTeam: Identifiable, Hashable, Sendable {
     public let division: String
     public let reputation: Int
     public let count: Int
-    /// 0 = first team, then down by team reputation.
+    /// Age limit from the game: 100 (or nil with older scans) for senior teams, 21 for U21…
+    public let ageLimit: Int?
+    /// 0 = first team, then other senior teams, then youth teams from oldest to youngest.
     public let rank: Int
+    public var isYouth: Bool { (ageLimit ?? 100) < 100 }
     public var label: String {
-        rank == 0 ? "First team" : (division.isEmpty ? "Team \(rank + 1)" : division)
+        if let a = ageLimit, a < 100 { return "U\(a)" }
+        if rank == 0 { return "First team" }
+        return division.isEmpty ? "Reserves" : "Reserves (\(division))"
     }
 }
 
 extension SquadBuilder {
-    /// The club's teams as seen through contracts, first team first (highest team reputation).
+    /// The club's teams as seen through contracts: the senior team with the highest reputation is
+    /// the first team, then other senior teams, then youth teams by age group.
     public static func teams(club: String, rows: [PlayerRow]) -> [ClubTeam] {
-        var groups: [UInt32: (div: [String: Int], rep: Int, count: Int)] = [:]
+        var groups: [UInt32: (div: [String: Int], rep: Int, count: Int, age: Int?)] = [:]
         for r in rows where r.person.club == club {
             guard let t = r.person.tm else { continue }
-            var g = groups[t] ?? ([:], 0, 0)
+            var g = groups[t] ?? ([:], 0, 0, r.person.tage)
             if let d = r.person.div { g.div[d, default: 0] += 1 }
             g.rep = max(g.rep, r.person.trep ?? 0)
             g.count += 1
             groups[t] = g
         }
         let sorted = groups.sorted { a, b in
-            a.value.rep != b.value.rep ? a.value.rep > b.value.rep : a.value.count > b.value.count
+            let ya = (a.value.age ?? 100) < 100, yb = (b.value.age ?? 100) < 100
+            if ya != yb { return !ya }                                        // senior teams first
+            if ya, let x = a.value.age, let y = b.value.age, x != y { return x > y }   // U23, U21, U18…
+            return a.value.rep != b.value.rep ? a.value.rep > b.value.rep : a.value.count > b.value.count
         }
         return sorted.enumerated().map { i, kv in
             ClubTeam(id: kv.key, division: kv.value.div.max { $0.value < $1.value }?.key ?? "",
-                     reputation: kv.value.rep, count: kv.value.count, rank: i)
+                     reputation: kv.value.rep, count: kv.value.count, ageLimit: kv.value.age, rank: i)
         }
     }
 

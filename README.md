@@ -84,7 +84,7 @@ hidden attributes and potential, and plan your squad.
 
 **First start:** launch FM from Steam as usual. The first start takes a few minutes, and the game may
 close once on its own while BepInEx prepares itself. Just start it again. To check it worked, open
-`BepInEx/LogOutput.log` in the game folder. It should contain `Pitchside 0.4.0 loaded`.
+`BepInEx/LogOutput.log` in the game folder. It should contain `Pitchside 0.4.1 loaded`.
 
 ## Use
 
@@ -126,7 +126,7 @@ Patches can move data around in memory. If a scan finds very few players, or val
 | App says the plugin hasn't picked up the request | FM wasn't started through the launch option, or BepInEx didn't load. Check `BepInEx/LogOutput.log` in the game folder and `/tmp/pitchside_launch.log`. |
 | Game quits before the main menu | Normal once on the very first start. If it keeps happening, clear the launch option to play normally and open an issue with the two logs above. |
 | Scan finds very few players, or values are wrong | See *After a Football Manager patch*. |
-| Ages are a year off | The in-game date isn't read yet. Set the season in Settings (⌘,). |
+| Ages are a year off | Check the in-game date in the status bar; if it's wrong, set the season in Settings (⌘,). |
 | *"Pitchside.app can't be opened"* | Right-click it → **Open** → **Open**. Apps you build yourself aren't notarised by Apple. |
 
 ## Known limitations
@@ -134,7 +134,9 @@ Patches can move data around in memory. If a scan finds very few players, or val
 - **Player interest is an estimate.** FM works out a player's interest when you search and doesn't store
   it, so Pitchside approximates it from club and league size, the player's reputation, ambition, loyalty,
   age, contract and transfer status. Treat it as a guide.
-- The in-game date isn't read yet, so ages are based on today's date or the season you set.
+- The in-game date is worked out from the most recent contract signing in the database, so it can be
+  a day or two behind. It's shown in the status bar; the season can be set by hand in Settings.
+- Players out on loan still count towards their parent club's team.
 - Two staff attributes (Authority, Adaptability) aren't mapped yet.
 - Only the Steam version on Apple Silicon is supported. Intel Macs, Game Pass and Epic aren't.
 

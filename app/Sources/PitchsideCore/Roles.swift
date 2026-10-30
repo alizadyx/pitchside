@@ -1,92 +1,321 @@
 import Foundation
 
-/// A tactical role scored from attributes. Key attributes count three times as much as
-/// supporting ones; the result stays on FM's 1–20 scale.
+/// FM27 splits every role into an In Possession (IP) and an Out of Possession (OOP) part, chosen
+/// per position. Attribute lists come from the game itself: IP key/preferable attributes as FM27
+/// highlights them on the player screen, OOP key attributes from the role cards.
+public enum Phase: String, Sendable, Hashable, Codable {
+    case inPossession, outOfPossession
+    public var short: String { self == .inPossession ? "IP" : "OOP" }
+}
+
+/// A tactical role scored from attributes. Key attributes count six times as much as preferable
+/// ones: with these weights the scores rank roles in the same order as FM27's role stars
+/// (checked on 58 role pairs across 8 players). The result stays on FM's 1–20 scale.
 public struct Role: Sendable, Hashable, Identifiable {
     public var id: String { code }
     public let code: String
     public let name: String
-    public let positions: [String]       // FM position codes where the role is played
+    public let phase: Phase
+    public let positions: [String]       // FM position codes where the role is offered
     public let key: [String]
-    public let support: [String]
+    public let support: [String]         // FM's "preferable" attributes
 
-    public init(_ code: String, _ name: String, _ positions: [String], key: [String], support: [String]) {
-        self.code = code; self.name = name; self.positions = positions; self.key = key; self.support = support
+    public init(_ code: String, _ name: String, _ phase: Phase, _ positions: [String], key: [String], support: [String]) {
+        self.code = code; self.name = name; self.phase = phase; self.positions = positions; self.key = key; self.support = support
     }
+
+    /// "Winger" or "Winger (OOP)": IP and OOP lists share some names.
+    public var label: String { phase == .inPossession ? name : "\(name) (OOP)" }
+    public var isIP: Bool { phase == .inPossession }
+}
+
+/// Role scores for one player, aligned with `Roles.all`. Stored as tenths in a byte each, so a
+/// 500k-player database stays small (scores are already rounded to one decimal).
+public struct RoleScores: Sendable, Hashable {
+    let raw: [UInt8]
+    public init(_ values: [Double]) { raw = values.map { UInt8(max(0, min(250, ($0 * 10).rounded()))) } }
+    public subscript(_ i: Int) -> Double { i >= 0 && i < raw.count ? Double(raw[i]) / 10 : 0 }
+    public var count: Int { raw.count }
+    public var indices: Range<Int> { raw.indices }
 }
 
 public enum Roles {
     public static let all: [Role] = [
-        Role("GK", "Goalkeeper", ["GK"],
-             key: ["AerialReach", "CommandOfArea", "Communication", "Handling", "Kicking", "Reflexes", "Concentration", "Positioning"],
-             support: ["OneOnOnes", "Throwing", "Anticipation", "Decisions", "Agility"]),
-        Role("SK", "Sweeper Keeper", ["GK"],
-             key: ["CommandOfArea", "Kicking", "OneOnOnes", "Reflexes", "RushingOut", "Anticipation", "Composure", "Concentration", "Positioning"],
-             support: ["AerialReach", "Handling", "Passing", "Throwing", "Decisions", "Vision", "Acceleration", "FirstTouch"]),
-        Role("CD", "Central Defender", ["DC"],
-             key: ["Heading", "Marking", "Tackling", "Positioning", "JumpingReach", "Strength"],
-             support: ["Aggression", "Anticipation", "Bravery", "Composure", "Concentration", "Decisions", "Pace"]),
-        Role("BPD", "Ball-Playing Defender", ["DC"],
-             key: ["Heading", "Marking", "Passing", "Tackling", "Composure", "Positioning", "JumpingReach", "Strength"],
-             support: ["FirstTouch", "Technique", "Aggression", "Anticipation", "Bravery", "Concentration", "Decisions", "Vision", "Pace"]),
-        Role("FB", "Full-Back", ["DL", "DR"],
-             key: ["Marking", "Tackling", "Anticipation", "Concentration", "Positioning", "Teamwork"],
-             support: ["Crossing", "Passing", "Decisions", "WorkRate", "Pace", "Stamina"]),
-        Role("WB", "Wing-Back", ["DL", "DR", "WBL", "WBR"],
-             key: ["Crossing", "Dribbling", "Tackling", "OffTheBall", "Teamwork", "WorkRate", "Acceleration", "Stamina"],
-             support: ["FirstTouch", "Marking", "Passing", "Technique", "Anticipation", "Concentration", "Decisions", "Flair", "Positioning", "Agility", "Balance", "Pace"]),
-        Role("IWB", "Inverted Wing-Back", ["DL", "DR", "WBL", "WBR"],
-             key: ["Passing", "Tackling", "Composure", "Decisions", "Teamwork"],
-             support: ["FirstTouch", "Marking", "Technique", "Anticipation", "Concentration", "OffTheBall", "Positioning", "Vision", "WorkRate", "Acceleration", "Agility", "Stamina"]),
-        Role("DM", "Defensive Midfielder", ["DM"],
+        Role("GK", "Goalkeeper", .inPossession, ["GK"],
+             key: ["AerialReach", "CommandOfArea", "Communication", "Handling", "Reflexes", "Concentration", "Positioning", "Agility"],
+             support: ["Kicking", "OneOnOnes", "Throwing", "Anticipation", "Decisions"]),
+        Role("BPGK", "Ball-Playing Goalkeeper", .inPossession, ["GK"],
+             key: ["AerialReach", "CommandOfArea", "Communication", "Handling", "Kicking", "Reflexes", "Concentration", "Positioning", "Agility"],
+             support: ["Eccentricity", "OneOnOnes", "Passing", "Throwing", "Anticipation", "Composure", "Decisions"]),
+        Role("NNGK", "No-Nonsense Goalkeeper", .inPossession, ["GK"],
+             key: ["AerialReach", "CommandOfArea", "Communication", "Handling", "Reflexes", "Concentration", "Positioning", "Agility"],
+             support: ["OneOnOnes", "Anticipation", "Decisions"]),
+        Role("CB", "Centre-Back", .inPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "JumpingReach", "Strength"],
+             support: ["Aggression", "Bravery", "Composure", "Concentration", "Decisions", "Pace"]),
+        Role("BPCB", "Ball-Playing Centre-Back", .inPossession, ["DC"],
+             key: ["Heading", "Marking", "Passing", "Tackling", "Anticipation", "Composure", "Positioning", "JumpingReach", "Strength"],
+             support: ["FirstTouch", "Technique", "Aggression", "Bravery", "Concentration", "Decisions", "Vision", "Pace"]),
+        Role("ACB", "Advanced Centre-Back", .inPossession, ["DC"],
+             key: ["Heading", "Marking", "Passing", "Tackling", "Technique", "Anticipation", "Composure", "Decisions", "Positioning", "Teamwork", "JumpingReach", "Strength"],
+             support: ["Dribbling", "FirstTouch", "Aggression", "Bravery", "Concentration", "Vision", "Pace", "Stamina"]),
+        Role("NNCB", "No-Nonsense Centre-Back", .inPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "JumpingReach", "Strength"],
+             support: ["Aggression", "Bravery", "Concentration", "Pace"]),
+        Role("WCB", "Wide Centre-Back", .inPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "JumpingReach", "Strength"],
+             support: ["Dribbling", "Aggression", "Bravery", "Composure", "Concentration", "Decisions", "WorkRate", "Acceleration", "Agility", "Pace", "Stamina"]),
+        Role("OCB", "Overlapping Centre-Back", .inPossession, ["DC"],
+             key: ["Crossing", "Heading", "Marking", "Tackling", "Anticipation", "WorkRate", "JumpingReach", "Pace", "Stamina", "Strength"],
+             support: ["Dribbling", "Technique", "Aggression", "Bravery", "Composure", "Concentration", "Decisions", "OffTheBall", "Positioning", "Acceleration", "Agility"]),
+        Role("FB", "Full-Back", .inPossession, ["DL", "DR"],
+             key: ["Marking", "Tackling", "Anticipation", "Concentration", "Positioning", "Teamwork", "Acceleration"],
+             support: ["Crossing", "Dribbling", "Passing", "Technique", "Decisions", "WorkRate", "Agility", "Pace", "Stamina"]),
+        Role("IFB", "Inside Full-Back", .inPossession, ["DL", "DR"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "Strength"],
+             support: ["Dribbling", "Aggression", "Bravery", "Composure", "Concentration", "Decisions", "WorkRate", "Acceleration", "Agility", "JumpingReach", "Pace", "Stamina"]),
+        Role("WB", "Wing-Back", .inPossession, ["DL", "DR", "WBL", "WBR"],
+             key: ["Crossing", "Marking", "Tackling", "Teamwork", "WorkRate", "Acceleration", "Pace", "Stamina"],
+             support: ["Dribbling", "FirstTouch", "Passing", "Technique", "Anticipation", "Concentration", "Decisions", "OffTheBall", "Positioning", "Agility", "Balance"]),
+        Role("IWB", "Inside Wing-Back", .inPossession, ["DL", "DR", "WBL", "WBR"],
+             key: ["Passing", "Tackling", "Anticipation", "Composure", "Decisions", "Positioning", "Teamwork", "Acceleration"],
+             support: ["FirstTouch", "Marking", "Technique", "Concentration", "WorkRate", "Agility", "Pace", "Stamina"]),
+        Role("PWB", "Playmaking Wing-Back", .inPossession, ["DL", "DR", "WBL", "WBR"],
+             key: ["FirstTouch", "Passing", "Tackling", "Technique", "Composure", "Decisions", "Teamwork", "Vision", "Acceleration"],
+             support: ["Crossing", "Dribbling", "Marking", "Anticipation", "Concentration", "OffTheBall", "Positioning", "WorkRate", "Agility", "Pace", "Stamina"]),
+        Role("AWB", "Advanced Wing-Back", .inPossession, ["WBL", "WBR"],
+             key: ["Crossing", "Dribbling", "Technique", "OffTheBall", "Teamwork", "WorkRate", "Acceleration", "Agility", "Pace", "Stamina"],
+             support: ["FirstTouch", "Marking", "Passing", "Tackling", "Anticipation", "Decisions", "Flair", "Positioning", "Balance"]),
+        Role("DM", "Defensive Midfielder", .inPossession, ["DM"],
              key: ["Tackling", "Anticipation", "Concentration", "Positioning", "Teamwork"],
-             support: ["Marking", "Passing", "Aggression", "Composure", "Decisions", "WorkRate", "Stamina", "Strength"]),
-        Role("DLP", "Deep-Lying Playmaker", ["DM", "MC"],
+             support: ["FirstTouch", "Marking", "Passing", "Aggression", "Composure", "Decisions", "WorkRate", "Stamina", "Strength"]),
+        Role("DLP", "Deep-Lying Playmaker", .inPossession, ["DM"],
              key: ["FirstTouch", "Passing", "Technique", "Composure", "Decisions", "Teamwork", "Vision"],
-             support: ["Anticipation", "OffTheBall", "Positioning", "Balance"]),
-        Role("BWM", "Ball-Winning Midfielder", ["DM", "MC"],
-             key: ["Tackling", "Aggression", "Anticipation", "Teamwork", "WorkRate", "Stamina"],
-             support: ["Marking", "Bravery", "Concentration", "Positioning", "Agility", "Pace", "Strength"]),
-        Role("B2B", "Box-to-Box Midfielder", ["MC"],
+             support: ["Marking", "Tackling", "Anticipation", "Concentration", "OffTheBall", "Positioning", "WorkRate", "Balance", "Stamina"]),
+        Role("B2B", "Box-To-Box Midfielder", .inPossession, ["DM"],
              key: ["Passing", "Tackling", "OffTheBall", "Teamwork", "WorkRate", "Stamina"],
-             support: ["Dribbling", "FirstTouch", "LongShots", "Technique", "Aggression", "Anticipation", "Composure", "Decisions", "Positioning", "Acceleration", "Balance", "Pace", "Strength"]),
-        Role("CM", "Central Midfielder", ["MC"],
+             support: ["Dribbling", "Finishing", "FirstTouch", "LongShots", "Technique", "Aggression", "Anticipation", "Composure", "Decisions", "Positioning", "Acceleration", "Balance", "Pace", "Strength"]),
+        Role("B2BP", "Box-To-Box Playmaker", .inPossession, ["DM"],
+             key: ["FirstTouch", "Passing", "Technique", "Composure", "Decisions", "OffTheBall", "Teamwork", "Vision", "WorkRate", "Stamina"],
+             support: ["Dribbling", "LongShots", "Marking", "Tackling", "Anticipation", "Positioning", "Acceleration", "Agility", "Balance", "Pace"]),
+        Role("HB", "Half Back", .inPossession, ["DM"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Concentration", "Positioning", "Teamwork", "JumpingReach", "Strength"],
+             support: ["FirstTouch", "Passing", "Aggression", "Bravery", "Composure", "Decisions", "WorkRate", "Stamina"]),
+        Role("CM", "Central Midfielder", .inPossession, ["MC"],
              key: ["FirstTouch", "Passing", "Tackling", "Decisions", "Teamwork"],
-             support: ["Technique", "Anticipation", "Composure", "Concentration", "OffTheBall", "Vision", "WorkRate", "Stamina"]),
-        Role("MEZ", "Mezzala", ["MC"],
-             key: ["Passing", "Technique", "Decisions", "OffTheBall", "WorkRate", "Acceleration"],
-             support: ["Dribbling", "FirstTouch", "LongShots", "Anticipation", "Composure", "Vision", "Balance", "Stamina"]),
-        Role("AP", "Advanced Playmaker", ["MC", "AMC", "AML", "AMR"],
+             support: ["Technique", "Anticipation", "Composure", "Concentration", "OffTheBall", "Positioning", "Vision", "WorkRate", "Stamina"]),
+        Role("WCM", "Wide Central Midfielder", .inPossession, ["MC"],
+             key: ["FirstTouch", "Passing", "Tackling", "Decisions", "Teamwork"],
+             support: ["Crossing", "Dribbling", "Technique", "Anticipation", "Composure", "Concentration", "OffTheBall", "Positioning", "Vision", "WorkRate", "Agility", "Stamina"]),
+        Role("MP", "Midfield Playmaker", .inPossession, ["MC"],
              key: ["FirstTouch", "Passing", "Technique", "Composure", "Decisions", "OffTheBall", "Teamwork", "Vision"],
-             support: ["Dribbling", "Anticipation", "Flair", "Agility"]),
-        Role("AM", "Attacking Midfielder", ["AMC"],
-             key: ["FirstTouch", "LongShots", "Passing", "Technique", "Anticipation", "Decisions", "Flair", "OffTheBall"],
-             support: ["Dribbling", "Composure", "Vision", "Agility"]),
-        Role("W", "Winger", ["ML", "MR", "AML", "AMR"],
-             key: ["Crossing", "Dribbling", "Technique", "Acceleration", "Agility"],
-             support: ["FirstTouch", "Passing", "OffTheBall", "WorkRate", "Balance", "Pace", "Stamina"]),
-        Role("IF", "Inside Forward", ["AML", "AMR"],
-             key: ["Dribbling", "Finishing", "FirstTouch", "Technique", "OffTheBall", "Acceleration", "Agility"],
-             support: ["LongShots", "Passing", "Anticipation", "Composure", "Flair", "WorkRate", "Balance", "Pace", "Stamina"]),
-        Role("IW", "Inverted Winger", ["ML", "MR", "AML", "AMR"],
-             key: ["Crossing", "Dribbling", "Passing", "Technique", "Acceleration", "Agility"],
-             support: ["FirstTouch", "LongShots", "Composure", "Decisions", "OffTheBall", "Vision", "WorkRate", "Balance", "Pace", "Stamina"]),
-        Role("AF", "Advanced Forward", ["ST"],
-             key: ["Dribbling", "Finishing", "FirstTouch", "Technique", "Composure", "OffTheBall", "Acceleration"],
-             support: ["Passing", "Anticipation", "Decisions", "WorkRate", "Agility", "Balance", "Pace", "Stamina"]),
-        Role("P", "Poacher", ["ST"],
-             key: ["Finishing", "Anticipation", "Composure", "OffTheBall"],
-             support: ["FirstTouch", "Heading", "Technique", "Decisions", "Acceleration"]),
-        Role("TM", "Target Forward", ["ST"],
-             key: ["Heading", "Bravery", "Teamwork", "Balance", "JumpingReach", "Strength"],
-             support: ["Finishing", "FirstTouch", "Aggression", "Anticipation", "Composure", "Decisions", "OffTheBall"]),
-        Role("PF", "Pressing Forward", ["ST"],
-             key: ["Aggression", "Anticipation", "Bravery", "Teamwork", "WorkRate", "Acceleration", "Stamina"],
-             support: ["Finishing", "FirstTouch", "Composure", "Concentration", "Decisions", "OffTheBall", "Agility", "Balance", "Pace", "Strength"]),
-        Role("DLF", "Deep-Lying Forward", ["ST"],
-             key: ["FirstTouch", "Passing", "Technique", "Composure", "Decisions", "OffTheBall", "Teamwork"],
-             support: ["Finishing", "Anticipation", "Flair", "Vision", "Balance", "Strength"]),
+             support: ["Dribbling", "Tackling", "Anticipation", "Flair", "Positioning", "WorkRate", "Agility", "Stamina"]),
+        Role("CHM", "Channel Midfielder", .inPossession, ["MC", "AMC"],
+             key: ["Crossing", "FirstTouch", "Passing", "Technique", "Composure", "OffTheBall", "WorkRate", "Acceleration"],
+             support: ["Dribbling", "LongShots", "Anticipation", "Decisions", "Flair", "Vision", "Agility", "Pace", "Stamina"]),
+        Role("AP", "Advanced Playmaker", .inPossession, ["MC", "AMC"],
+             key: ["FirstTouch", "Passing", "Technique", "Composure", "Decisions", "OffTheBall", "Teamwork", "Vision"],
+             support: ["Crossing", "Dribbling", "Anticipation", "Flair", "Acceleration", "Agility"]),
+        Role("AM", "Attacking Midfielder", .inPossession, ["MC", "AMC"],
+             key: ["FirstTouch", "LongShots", "Passing", "Technique", "Composure", "Flair", "OffTheBall"],
+             support: ["Crossing", "Dribbling", "Finishing", "Anticipation", "Decisions", "Vision", "Acceleration", "Agility"]),
+        Role("FR", "Free Role", .inPossession, ["AMC"],
+             key: ["Dribbling", "FirstTouch", "LongShots", "Passing", "Technique", "Composure", "Flair", "OffTheBall", "Vision"],
+             support: ["Crossing", "Finishing", "Anticipation", "Decisions", "Acceleration", "Agility"]),
+        Role("SS", "Second Striker", .inPossession, ["AMC"],
+             key: ["Finishing", "FirstTouch", "Anticipation", "Composure", "OffTheBall", "Acceleration"],
+             support: ["Dribbling", "LongShots", "Passing", "Technique", "Concentration", "Decisions", "WorkRate", "Agility", "Pace", "Stamina"]),
+        Role("WM", "Wide Midfielder", .inPossession, ["ML", "MR"],
+             key: ["Crossing", "Passing", "Technique", "Decisions", "Teamwork", "WorkRate", "Pace", "Stamina"],
+             support: ["Dribbling", "FirstTouch", "Anticipation", "Composure", "OffTheBall", "Vision", "Acceleration", "Agility"]),
+        Role("W", "Winger", .inPossession, ["ML", "MR", "AML", "AMR"],
+             key: ["Crossing", "Dribbling", "Technique", "Teamwork", "Acceleration", "Agility", "Pace"],
+             support: ["FirstTouch", "Passing", "Anticipation", "Flair", "OffTheBall", "WorkRate", "Balance", "Stamina"]),
+        Role("IW", "Inside Winger", .inPossession, ["ML", "MR", "AML", "AMR"],
+             key: ["Dribbling", "FirstTouch", "Technique", "Composure", "Teamwork", "Acceleration", "Agility"],
+             support: ["Crossing", "LongShots", "Passing", "Anticipation", "Flair", "OffTheBall", "Vision", "WorkRate", "Balance", "Pace", "Stamina"]),
+        Role("PW", "Playmaking Winger", .inPossession, ["ML", "MR", "AML", "AMR"],
+             key: ["Crossing", "Dribbling", "FirstTouch", "Passing", "Technique", "Composure", "Decisions", "OffTheBall", "Teamwork", "Vision", "Acceleration"],
+             support: ["Anticipation", "Flair", "WorkRate", "Agility", "Pace", "Stamina"]),
+        Role("IF", "Inside Forward", .inPossession, ["AML", "AMR"],
+             key: ["Dribbling", "FirstTouch", "Technique", "Anticipation", "Composure", "OffTheBall", "Acceleration", "Agility"],
+             support: ["Crossing", "Finishing", "LongShots", "Passing", "Flair", "Vision", "WorkRate", "Balance", "Pace", "Stamina"]),
+        Role("WF", "Wide Forward", .inPossession, ["AML", "AMR"],
+             key: ["Dribbling", "FirstTouch", "Technique", "Anticipation", "OffTheBall", "Acceleration", "Agility", "Pace"],
+             support: ["Crossing", "Finishing", "Passing", "Composure", "Flair", "WorkRate", "Balance", "Stamina"]),
+        Role("CF", "Centre Forward", .inPossession, ["ST"],
+             key: ["Finishing", "FirstTouch", "Heading", "Technique", "Composure", "OffTheBall", "Acceleration", "Strength"],
+             support: ["Dribbling", "Passing", "Anticipation", "Decisions", "Agility", "Balance", "JumpingReach", "Pace"]),
+        Role("TF", "Target Forward", .inPossession, ["ST"],
+             key: ["Finishing", "Heading", "Aggression", "Bravery", "Composure", "OffTheBall", "Balance", "JumpingReach", "Strength"],
+             support: ["FirstTouch", "Anticipation", "Decisions", "Teamwork"]),
+        Role("P", "Poacher", .inPossession, ["ST"],
+             key: ["Finishing", "Heading", "Anticipation", "Composure", "Concentration", "OffTheBall", "Acceleration"],
+             support: ["FirstTouch", "Technique", "Decisions", "Balance"]),
+        Role("CHF", "Channel Forward", .inPossession, ["ST"],
+             key: ["Dribbling", "Finishing", "FirstTouch", "Technique", "Composure", "OffTheBall", "WorkRate", "Acceleration"],
+             support: ["Crossing", "Heading", "Passing", "Anticipation", "Decisions", "Agility", "Balance", "Pace", "Stamina"]),
+        Role("DLF", "Deep-Lying Forward", .inPossession, ["ST"],
+             key: ["Finishing", "FirstTouch", "Technique", "Composure", "OffTheBall", "Strength"],
+             support: ["Dribbling", "Passing", "Anticipation", "Decisions", "Teamwork", "Vision", "Balance"]),
+        Role("F9", "False Nine", .inPossession, ["ST"],
+             key: ["Dribbling", "FirstTouch", "Passing", "Technique", "Composure", "Decisions", "OffTheBall", "Teamwork", "Vision", "Acceleration"],
+             support: ["Finishing", "Anticipation", "Flair", "Agility", "Balance"]),
+        Role("oGK", "Goalkeeper", .outOfPossession, ["GK"],
+             key: ["Handling", "AerialReach", "CommandOfArea", "Communication", "Positioning", "Reflexes", "Agility", "Concentration"],
+             support: []),
+        Role("oSK", "Sweeper Keeper", .outOfPossession, ["GK"],
+             key: ["Handling", "AerialReach", "CommandOfArea", "Communication", "Anticipation", "Decisions", "OneOnOnes", "Reflexes"],
+             support: []),
+        Role("oLK", "Line-Holding Keeper", .outOfPossession, ["GK"],
+             key: ["Handling", "AerialReach", "CommandOfArea", "Communication", "Positioning", "Reflexes", "Agility", "Concentration"],
+             support: []),
+        Role("oCB", "Centre-Back", .outOfPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "Strength", "JumpingReach"],
+             support: []),
+        Role("oSCB", "Stopping Centre-Back", .outOfPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "Strength", "JumpingReach", "Bravery"],
+             support: []),
+        Role("oCCB", "Covering Centre-Back", .outOfPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Decisions", "Positioning", "Strength", "Pace"],
+             support: []),
+        Role("oWCB", "Wide Centre-Back", .outOfPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "Strength", "JumpingReach"],
+             support: []),
+        Role("oSWCB", "Stopping Wide Centre-Back", .outOfPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Positioning", "Strength", "JumpingReach", "Bravery"],
+             support: []),
+        Role("oCWCB", "Covering Wide Centre-Back", .outOfPossession, ["DC"],
+             key: ["Heading", "Marking", "Tackling", "Anticipation", "Decisions", "Positioning", "Strength", "Pace"],
+             support: []),
+        Role("oFB", "Full-Back", .outOfPossession, ["DL", "DR"],
+             key: ["Marking", "Tackling", "Anticipation", "Positioning", "Teamwork", "Acceleration"],
+             support: []),
+        Role("oPFB", "Pressing Full-Back", .outOfPossession, ["DL", "DR"],
+             key: ["Marking", "Tackling", "Anticipation", "Positioning", "Teamwork", "WorkRate", "Acceleration", "Aggression"],
+             support: []),
+        Role("oHFB", "Holding Full-Back", .outOfPossession, ["DL", "DR"],
+             key: ["Marking", "Tackling", "Anticipation", "Decisions", "Positioning", "Acceleration", "Concentration"],
+             support: []),
+        Role("oWB", "Wing-Back", .outOfPossession, ["WBL", "WBR"],
+             key: ["Marking", "Tackling", "Anticipation", "Positioning", "Teamwork", "Acceleration", "Stamina"],
+             support: []),
+        Role("oPWB", "Pressing Wing-Back", .outOfPossession, ["WBL", "WBR"],
+             key: ["Marking", "Tackling", "Anticipation", "Positioning", "Teamwork", "WorkRate", "Acceleration", "Stamina"],
+             support: []),
+        Role("oHWB", "Holding Wing-Back", .outOfPossession, ["WBL", "WBR"],
+             key: ["Marking", "Tackling", "Anticipation", "Decisions", "Positioning", "Acceleration", "Concentration"],
+             support: []),
+        Role("oDM", "Defensive Midfielder", .outOfPossession, ["DM"],
+             key: ["Tackling", "Anticipation", "Decisions", "Positioning", "Teamwork", "WorkRate"],
+             support: []),
+        Role("oDDM", "Dropping Defensive Midfielder", .outOfPossession, ["DM"],
+             key: ["Marking", "Tackling", "Anticipation", "Decisions", "Positioning", "Teamwork", "WorkRate", "Strength"],
+             support: []),
+        Role("oPDM", "Pressing Defensive Midfielder", .outOfPossession, ["DM"],
+             key: ["Tackling", "Anticipation", "Decisions", "Positioning", "Teamwork", "WorkRate", "Stamina", "Aggression"],
+             support: []),
+        Role("oSDM", "Screening Defensive Midfielder", .outOfPossession, ["DM"],
+             key: ["Marking", "Tackling", "Anticipation", "Decisions", "Positioning", "Concentration"],
+             support: []),
+        Role("oWCDM", "Wide Covering Defensive Midfielder", .outOfPossession, ["DM"],
+             key: ["Marking", "Tackling", "Anticipation", "Decisions", "Positioning", "Teamwork", "WorkRate", "Stamina"],
+             support: []),
+        Role("oCM", "Central Midfielder", .outOfPossession, ["MC"],
+             key: ["Tackling", "Decisions", "Teamwork", "WorkRate"],
+             support: []),
+        Role("oPCM", "Pressing Central Midfielder", .outOfPossession, ["MC"],
+             key: ["Tackling", "Anticipation", "Decisions", "Teamwork", "WorkRate", "Stamina", "Aggression"],
+             support: []),
+        Role("oSCM", "Screening Central Midfielder", .outOfPossession, ["MC"],
+             key: ["Marking", "Tackling", "Decisions", "Positioning", "Concentration"],
+             support: []),
+        Role("oWCCM", "Wide Covering Central Midfielder", .outOfPossession, ["MC"],
+             key: ["Marking", "Tackling", "Decisions", "Teamwork", "WorkRate", "Stamina", "Agility"],
+             support: []),
+        Role("oWM", "Wide Midfielder", .outOfPossession, ["ML", "MR"],
+             key: ["Decisions", "Teamwork", "WorkRate", "Acceleration"],
+             support: []),
+        Role("oTWM", "Tracking Wide Midfielder", .outOfPossession, ["ML", "MR"],
+             key: ["Anticipation", "Decisions", "Teamwork", "WorkRate", "Acceleration", "Stamina", "Aggression"],
+             support: []),
+        Role("oWOWM", "Wide Outlet Wide Midfielder", .outOfPossession, ["ML", "MR"],
+             key: ["OffTheBall", "Anticipation", "Decisions", "Teamwork", "Pace", "Concentration"],
+             support: []),
+        Role("oW", "Winger", .outOfPossession, ["AML", "AMR"],
+             key: ["Anticipation", "Decisions", "Teamwork", "WorkRate", "Acceleration"],
+             support: []),
+        Role("oTW", "Tracking Winger", .outOfPossession, ["AML", "AMR"],
+             key: ["Anticipation", "Decisions", "Teamwork", "WorkRate", "Acceleration", "Stamina", "Aggression"],
+             support: []),
+        Role("oIOW", "Inside Outlet Winger", .outOfPossession, ["AML", "AMR"],
+             key: ["OffTheBall", "Anticipation", "Decisions", "Teamwork", "Balance", "Concentration"],
+             support: []),
+        Role("oWOW", "Wide Outlet Winger", .outOfPossession, ["AML", "AMR"],
+             key: ["OffTheBall", "Anticipation", "Decisions", "Teamwork", "Pace", "Concentration"],
+             support: []),
+        Role("oAM", "Attacking Midfielder", .outOfPossession, ["AMC"],
+             key: ["Anticipation", "Decisions", "WorkRate"],
+             support: []),
+        Role("oTAM", "Tracking Attacking Midfielder", .outOfPossession, ["AMC"],
+             key: ["Anticipation", "Decisions", "Teamwork", "WorkRate", "Stamina", "Aggression"],
+             support: []),
+        Role("oCOAM", "Central Outlet Attacking Midfielder", .outOfPossession, ["AMC"],
+             key: ["OffTheBall", "Anticipation", "Decisions", "Teamwork", "Balance", "Concentration"],
+             support: []),
+        Role("oSOAM", "Splitting Outlet Attacking Midfielder", .outOfPossession, ["AMC"],
+             key: ["OffTheBall", "Anticipation", "Decisions", "Teamwork", "Pace", "Concentration"],
+             support: []),
+        Role("oCF", "Centre Forward", .outOfPossession, ["ST"],
+             key: ["Anticipation", "Decisions", "WorkRate"],
+             support: []),
+        Role("oTCF", "Tracking Centre Forward", .outOfPossession, ["ST"],
+             key: ["Anticipation", "Decisions", "Teamwork", "WorkRate", "Stamina", "Aggression"],
+             support: []),
+        Role("oCOCF", "Central Outlet Centre Forward", .outOfPossession, ["ST"],
+             key: ["OffTheBall", "Anticipation", "Decisions", "Teamwork", "Balance", "Concentration"],
+             support: []),
+        Role("oSOCF", "Splitting Outlet Centre Forward", .outOfPossession, ["ST"],
+             key: ["OffTheBall", "Anticipation", "Decisions", "Teamwork", "Pace", "Concentration"],
+             support: []),
     ]
+
+    public static let inPossession: [Role] = all.filter(\.isIP)
+    public static let outOfPossession: [Role] = all.filter { !$0.isIP }
+
+    public static func index(_ code: String) -> Int? { indexByCode[code] ?? indexByCode[migrate(code)] }
+    static let indexByCode: [String: Int] = Dictionary(uniqueKeysWithValues: all.enumerated().map { ($1.code, $0) })
+    public static func role(_ code: String) -> Role? { index(code).map { all[$0] } }
+
+    /// Roles offered at a position in one phase.
+    public static func offered(at position: String, _ phase: Phase) -> [Role] {
+        all.filter { $0.phase == phase && $0.positions.contains(position) }
+    }
+
+    /// Role codes from Pitchside 0.4 and earlier (FM24-style roles) → the nearest FM27 IP role.
+    public static func migrate(_ code: String) -> String {
+        switch code {
+        case "SK": "GK"
+        case "CD": "CB"
+        case "BPD": "BPCB"
+        case "BWM": "DM"
+        case "MEZ": "CHM"
+        case "AF": "CHF"
+        case "TM": "TF"
+        case "PF": "CF"
+        default: code
+        }
+    }
+
+    /// Usual OOP partner for an old single role (0.4 formations only stored one role per slot).
+    public static func legacyOOP(_ code: String) -> String? {
+        switch code {
+        case "SK": "oSK"
+        case "BWM": "oPDM"
+        case "PF": "oTCF"
+        default: nil
+        }
+    }
 
     /// Pre-resolved attribute indices for fast scoring of many players.
     public struct Resolved: Sendable {
@@ -107,11 +336,14 @@ public enum Roles {
         }
     }
 
+    public static let keyWeight = 3.0
+    public static let preferableWeight = 0.5
+
     /// 1–20 score, one decimal.
     public static func score(_ r: Resolved, attrs: [UInt8]) -> Double {
         var sum = 0.0, w = 0.0
-        for i in r.key where i < attrs.count { sum += 3 * Double(attrs[i]); w += 3 }
-        for i in r.support where i < attrs.count { sum += Double(attrs[i]); w += 1 }
+        for i in r.key where i < attrs.count { sum += keyWeight * Double(attrs[i]); w += keyWeight }
+        for i in r.support where i < attrs.count { sum += preferableWeight * Double(attrs[i]); w += preferableWeight }
         guard w > 0 else { return 0 }
         return (sum / w * 10).rounded() / 10
     }

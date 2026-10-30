@@ -19,7 +19,7 @@ public struct PlayerRow: Identifiable, Sendable, Hashable {
     public let positionSet: Set<Int>       // indices with familiarity ≥ 15
     public let bestRole: String
     public let bestRoleScore: Double
-    public let roleScores: [Double]        // aligned with Roles.all
+    public let roleScores: RoleScores      // aligned with Roles.all
     public var shortlisted: Bool = false
     public var shortlistKey: Int { shortlisted ? 1 : 0 }
     /// Score for the role chosen in the filter (or the best role when none is chosen).
@@ -101,17 +101,20 @@ public enum RowBuilder {
             let scores = resolved.map { Roles.score($0, attrs: attrs) }
             // Best role among roles the player can actually play (natural/accomplished).
             var best = -1
-            for (i, r) in resolved.enumerated() where !natural.isDisjoint(with: r.positionIdx) {
+            // IP roles only: the OOP part is chosen separately and shown next to it.
+            for (i, r) in resolved.enumerated() where r.role.isIP && !natural.isDisjoint(with: r.positionIdx) {
                 if best < 0 || scores[i] > scores[best] { best = i }
             }
-            if best < 0, let m = scores.indices.max(by: { scores[$0] < scores[$1] }) { best = m }
+            if best < 0 {
+                for (i, r) in resolved.enumerated() where r.role.isIP && (best < 0 || scores[i] > scores[best]) { best = i }
+            }
             var row = PlayerRow(person: p,
                              age: Ages.age(dob: p.dob, at: reference),
                              positions: posText,
                              positionSet: natural,
                              bestRole: best >= 0 ? resolved[best].role.code : "",
                              bestRoleScore: best >= 0 ? scores[best] : 0,
-                             roleScores: scores,
+                             roleScores: RoleScores(scores),
                              shortlisted: shortlist.contains(p.id),
                              selectedRoleScore: best >= 0 ? scores[best] : 0)
             let gk = !fam.isEmpty && fam[0] >= 15 && (fam.max() ?? 0) == fam[0]
@@ -173,7 +176,7 @@ public struct PlayerFilter: Codable, Sendable, Equatable {
         positions = v(.positions, base.positions); expiringBy = v(.expiringBy, base.expiringBy)
         listedOnly = v(.listedOnly, base.listedOnly); hideNotForSale = v(.hideNotForSale, base.hideNotForSale)
         shortlistOnly = v(.shortlistOnly, base.shortlistOnly)
-        roleCode = v(.roleCode, base.roleCode); minRoleScore = v(.minRoleScore, base.minRoleScore)
+        roleCode = Roles.migrate(v(.roleCode, base.roleCode)); minRoleScore = v(.minRoleScore, base.minRoleScore)
         minMeta = v(.minMeta, base.minMeta); minGrowth = v(.minGrowth, base.minGrowth)
         onlyNew = v(.onlyNew, base.onlyNew); freeAgentsOnly = v(.freeAgentsOnly, base.freeAgentsOnly)
         gender = v(.gender, base.gender); rules = v(.rules, base.rules)
@@ -201,7 +204,7 @@ public enum Filtering {
         let attrIdx = Dictionary(uniqueKeysWithValues: meta.playerAttrKeys.enumerated().map { ($1, $0) })
         let hidIdx = Dictionary(uniqueKeysWithValues: meta.hiddenKeys.enumerated().map { ($1, $0) })
         let perIdx = Dictionary(uniqueKeysWithValues: meta.personalityKeys.enumerated().map { ($1, $0) })
-        let roleIdx = Roles.all.firstIndex { $0.code == f.roleCode }
+        let roleIdx = Roles.index(f.roleCode)
         // A role only makes sense for players who play one of its positions (unless positions are picked).
         let rolePositions: Set<Int>? = roleIdx.flatMap { ri in
             guard posIdx.isEmpty && !f.roleAnyPosition else { return nil }

@@ -18,18 +18,22 @@ final class FormationTests: XCTestCase {
         XCTAssertEqual(moved.slots[st].position, "AMR")
         XCTAssertTrue(Formations.roles(for: "AMR").contains { $0.code == moved.slots[st].role })
         XCTAssertEqual(Set(moved.slots.map(\.label)).count, moved.slots.count)
-        // DLP fits both DM and MC, so it survives the move.
+        XCTAssertTrue(Formations.oopRoles(for: "AMR").contains { $0.code == moved.slots[st].oop })
+        // Advanced Playmaker is offered in MC and AMC, so it survives the move; the OOP role is reset.
         var g = f
-        let dm = g.slots.firstIndex { $0.position == "DM" }!
-        g.slots[dm].role = "DLP"
-        XCTAssertEqual(Formations.moving(dm, to: "MC", in: g).slots[dm].role, "DLP")
+        let mc = g.slots.firstIndex { $0.position == "MC" }!
+        g.slots[mc].role = "AP"
+        let h = Formations.moving(mc, to: "AMC", in: g)
+        XCTAssertEqual(h.slots[mc].role, "AP")
+        XCTAssertEqual(h.slots[mc].oop, "oAM")
     }
 
     func testAddingSlot() {
         let f = Formations.all.first { $0.name == "4-4-2" }!
         let (g, i) = Formations.adding("DC", to: f)
         XCTAssertEqual(g.slots.count, 12)
-        XCTAssertEqual(g.slots[i].role, "CD")
+        XCTAssertEqual(g.slots[i].role, "CB")
+        XCTAssertEqual(g.slots[i].oop, "oCB")
         XCTAssertEqual(g.slots.filter { $0.position == "DC" }.map(\.label), ["LCB", "CB", "RCB"])
     }
 

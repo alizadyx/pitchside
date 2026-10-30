@@ -91,7 +91,7 @@ struct PlayersView: View {
         .onChange(of: store.rate) { store.refilter() }
     }
 
-    private func roleName(_ code: String) -> String { Roles.all.first { $0.code == code }?.name ?? code }
+    private func roleName(_ code: String) -> String { Roles.role(code)?.label ?? code }
 }
 
 struct PlayersTable: View {
@@ -232,7 +232,12 @@ struct PlayerFilterPanel: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Picker("Role", selection: $store.filter.roleCode) {
                             Text("Best role (any)").tag("")
-                            ForEach(Roles.all) { r in Text("\(r.name) (\(r.code))").tag(r.code) }
+                            SwiftUI.Section("In possession") {
+                                ForEach(Roles.inPossession) { r in Text("\(r.name) (\(r.code))").tag(r.code) }
+                            }
+                            SwiftUI.Section("Out of possession") {
+                                ForEach(Roles.outOfPossession) { r in Text("\(r.name) (\(r.code))").tag(r.code) }
+                            }
                         }
                         .labelsHidden()
                         if !store.filter.roleCode.isEmpty {
@@ -511,25 +516,36 @@ struct PlayerDetail: View {
         }
     }
 
+    private func roleLine(_ i: Int, _ meta: ExportMeta) -> some View {
+        let r = Roles.all[i]
+        let natural = !row.positionSet.isDisjoint(with: Set(r.positions.compactMap { meta.positionKeys.firstIndex(of: $0) }))
+        return HStack(spacing: 6) {
+            Text(r.name).font(.callout).lineLimit(1).minimumScaleFactor(0.8)
+                .foregroundStyle(natural ? Color.primary : Color.secondary)
+            Spacer(minLength: 4)
+            ProgressView(value: min(row.roleScores[i], 20), total: 20)
+                .tint(AttrColor.color(Int(row.roleScores[i].rounded())))
+                .frame(width: 60)
+            Text(String(format: "%.1f", row.roleScores[i])).font(.callout.bold()).monospacedDigit()
+                .frame(width: 32, alignment: .trailing)
+        }
+    }
+
     private func positionsAndRoles(_ p: Person, _ meta: ExportMeta) -> some View {
-        let top = Roles.all.indices.sorted { row.roleScores[$0] > row.roleScores[$1] }.prefix(7)
+        let posIdx = { (r: Role) in Set(r.positions.compactMap { meta.positionKeys.firstIndex(of: $0) }) }
+        func best(_ phase: Phase, _ n: Int) -> [Int] {
+            let all = Roles.all.indices.filter { Roles.all[$0].phase == phase }
+                .sorted { row.roleScores[$0] > row.roleScores[$1] }
+            let natural = all.filter { !row.positionSet.isDisjoint(with: posIdx(Roles.all[$0])) }
+            return Array((natural.count >= 3 ? natural : natural + all.filter { !natural.contains($0) }).prefix(n))
+        }
+        let ipTop = best(.inPossession, 5), oopTop = best(.outOfPossession, 3)
         let pitch = PositionPitch(familiarity: p.pos ?? [], keys: meta.positionKeys).frame(width: 118)
         let roles = VStack(alignment: .leading, spacing: 5) {
-            Text("ROLES").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            ForEach(Array(top), id: \.self) { i in
-                let r = Roles.all[i]
-                let natural = !row.positionSet.isDisjoint(with: Set(r.positions.compactMap { meta.positionKeys.firstIndex(of: $0) }))
-                HStack(spacing: 6) {
-                    Text(r.name).font(.callout).lineLimit(1).minimumScaleFactor(0.8)
-                        .foregroundStyle(natural ? Color.primary : Color.secondary)
-                    Spacer(minLength: 4)
-                    ProgressView(value: min(row.roleScores[i], 20), total: 20)
-                        .tint(AttrColor.color(Int(row.roleScores[i].rounded())))
-                        .frame(width: 60)
-                    Text(String(format: "%.1f", row.roleScores[i])).font(.callout.bold()).monospacedDigit()
-                        .frame(width: 32, alignment: .trailing)
-                }
-            }
+            Text("IN POSSESSION").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            ForEach(ipTop, id: \.self) { roleLine($0, meta) }
+            Text("OUT OF POSSESSION").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 4)
+            ForEach(oopTop, id: \.self) { roleLine($0, meta) }
         }
         return ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 14) { pitch; roles.frame(minWidth: 220) }

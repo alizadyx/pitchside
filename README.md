@@ -16,8 +16,14 @@ hidden attributes and potential, and plan your squad.
 - **Player search:** filter by name, club, nationality, division, age, current and potential ability,
   positions (picked on a pitch), value, wage, contract expiry and transfer status. You can also set any
   attribute minimum, including hidden and personality ones ("Pace ≥ 15", "Consistency ≥ 14").
-- **Role ratings:** rank everyone by 23 tactical roles, or by a meta score weighted towards the
-  attributes that matter most in FM's match engine.
+- **FM27 role ratings:** every In Possession and Out of Possession role in FM27 (79 in all), using the
+  key and preferable attributes the game itself highlights. The scores rank roles in the same order as
+  FM's role stars. There is also a meta score weighted towards the attributes that matter most in FM's
+  match engine.
+- **Tactics:** finds the formation that suits your squad best, with the best IP and OOP role for every
+  player and who's out of position. It also picks your set-piece takers (corners from each side, free
+  kicks, penalties, long throws, who attacks the ball and who stays back) and captains, and suggests
+  team instructions for both phases, a mentality and a tactical style, each with the attributes behind it.
 - **Your own columns:** add any stat, attribute, hidden attribute or personality trait as a column to the
   player, squad, signings and growth tables, sort by it, and drag column headers to reorder them.
 - **Right-click to copy** a player's name, ready to paste into FM's search.
@@ -27,7 +33,7 @@ hidden attributes and potential, and plan your squad.
 - **Player profiles:** all attributes with FM-style colours, hidden attributes, personality, positions
   on a pitch, best roles and star ratings.
 - **Squad builder:** pick your club (men's or women's side) and a formation, or build your own with any
-  position and role. It shows where your squad is thin, old or out of contract, and lists signings
+  position and IP/OOP role. It shows where your squad is thin, old or out of contract, and lists signings
   that would improve each position within your budget. **My squad** lists everyone at your club with
   their place in your XI, and **Timeline** shows the XI over the next three seasons as contracts end
   and players age. First team, youth and reserve teams can be viewed separately.
@@ -137,6 +143,10 @@ Patches can move data around in memory. If a scan finds very few players, or val
 - The in-game date is worked out from the most recent contract signing in the database, so it can be
   a day or two behind. It's shown in the status bar; the season can be set by hand in Settings.
 - Players out on loan still count towards their parent club's team.
+- **Tactics advice comes from attributes only.** It doesn't know your opponents, your players' morale or
+  how they've been playing, so treat it as a starting point and adjust in-game.
+- Out of Possession roles are scored on their key attributes only (FM's role cards list up to eight and
+  don't show preferable ones).
 - Only the Steam version on Apple Silicon is supported. Intel Macs, Game Pass and Epic aren't.
 
 ## How it works

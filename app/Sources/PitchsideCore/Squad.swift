@@ -2,15 +2,32 @@ import Foundation
 
 // MARK: - Formations
 
-/// One position in a formation: where it is played and which role is asked of it.
+/// One position in a formation: where it is played and the FM27 In Possession and
+/// Out of Possession roles asked of it.
 public struct Slot: Sendable, Hashable, Identifiable, Codable {
     public var id: String { label }
     public var label: String      // "LB", "LCB", … (unique within a formation)
     public var position: String   // FM position code used for familiarity
-    public var role: String       // Roles.all code
+    public var role: String       // IP role code (Roles.all)
+    public var oop: String        // OOP role code (Roles.all); "" = judge on the IP role only
 
-    public init(_ label: String, _ position: String, _ role: String) {
+    public init(_ label: String, _ position: String, _ role: String, _ oop: String? = nil) {
         self.label = label; self.position = position; self.role = role
+        self.oop = oop ?? Formations.defaultOOP(for: position)
+    }
+
+    enum CodingKeys: String, CodingKey { case label, position, role, oop }
+
+    /// Formations saved by 0.4 and earlier have FM24-style role codes and no OOP role.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        label = try c.decode(String.self, forKey: .label)
+        position = try c.decode(String.self, forKey: .position)
+        let old = try c.decode(String.self, forKey: .role)
+        role = Roles.migrate(old)
+        if Roles.role(role)?.isIP != true { role = Formations.defaultRole(for: position) }
+        oop = try c.decodeIfPresent(String.self, forKey: .oop)
+            ?? Roles.legacyOOP(old) ?? Formations.defaultOOP(for: position)
     }
 }
 
@@ -46,15 +63,24 @@ public enum Formations {
     }
 
     static let defaultRole: [String: String] = [
-        "GK": "GK", "DL": "FB", "DR": "FB", "DC": "CD", "WBL": "WB", "WBR": "WB", "DM": "DM",
-        "ML": "W", "MR": "W", "MC": "CM", "AML": "IF", "AMR": "IF", "AMC": "AM", "ST": "AF",
+        "GK": "GK", "DL": "FB", "DR": "FB", "DC": "CB", "WBL": "WB", "WBR": "WB", "DM": "DM",
+        "ML": "WM", "MR": "WM", "MC": "CM", "AML": "W", "AMR": "W", "AMC": "AM", "ST": "CF",
+    ]
+    static let defaultOOP: [String: String] = [
+        "GK": "oGK", "DL": "oFB", "DR": "oFB", "DC": "oCB", "WBL": "oWB", "WBR": "oWB", "DM": "oDM",
+        "ML": "oWM", "MR": "oWM", "MC": "oCM", "AML": "oW", "AMR": "oW", "AMC": "oAM", "ST": "oCF",
     ]
 
-    /// Roles FM offers at a position (the rest can still be chosen, but are unusual there).
-    public static func roles(for position: String) -> [Role] { Roles.all.filter { $0.positions.contains(position) } }
+    /// In Possession roles FM offers at a position.
+    public static func roles(for position: String) -> [Role] { Roles.offered(at: position, .inPossession) }
+    /// Out of Possession roles FM offers at a position.
+    public static func oopRoles(for position: String) -> [Role] { Roles.offered(at: position, .outOfPossession) }
 
     public static func defaultRole(for position: String) -> String {
         defaultRole[position] ?? roles(for: position).first?.code ?? "CM"
+    }
+    public static func defaultOOP(for position: String) -> String {
+        defaultOOP[position] ?? oopRoles(for: position).first?.code ?? ""
     }
 
     static let shortLabel: [String: String] = [
@@ -96,36 +122,73 @@ public enum Formations {
         if !roles(for: position).contains(where: { $0.code == f.slots[index].role }) {
             f.slots[index].role = defaultRole(for: position)
         }
+        if !oopRoles(for: position).contains(where: { $0.code == f.slots[index].oop }) {
+            f.slots[index].oop = defaultOOP(for: position)
+        }
         f.slots = relabel(f.slots)
         return f
     }
 
+    /// Common FM27 shapes with sensible starting roles (IP, OOP). Every slot can be changed.
     public static let all: [Formation] = [
-        Formation(name: "4-3-3", slots: [
-            Slot("GK", "GK", "SK"), Slot("LB", "DL", "FB"), Slot("LCB", "DC", "BPD"), Slot("RCB", "DC", "CD"),
-            Slot("RB", "DR", "FB"), Slot("DM", "DM", "DM"), Slot("LCM", "MC", "B2B"), Slot("RCM", "MC", "MEZ"),
-            Slot("LW", "AML", "IF"), Slot("RW", "AMR", "IF"), Slot("ST", "ST", "AF"),
+        Formation(name: "4-3-3", slots: back4 + [
+            Slot("DM", "DM", "DM", "oSDM"), Slot("LCM", "MC", "CHM", "oPCM"), Slot("RCM", "MC", "MP", "oCM"),
+            Slot("LW", "AML", "IF", "oW"), Slot("RW", "AMR", "IF", "oW"), Slot("ST", "ST", "CF", "oCF"),
         ]),
-        Formation(name: "4-2-3-1", slots: [
-            Slot("GK", "GK", "GK"), Slot("LB", "DL", "FB"), Slot("LCB", "DC", "BPD"), Slot("RCB", "DC", "CD"),
-            Slot("RB", "DR", "FB"), Slot("LDM", "DM", "DLP"), Slot("RDM", "DM", "BWM"),
-            Slot("LW", "AML", "W"), Slot("AM", "AMC", "AM"), Slot("RW", "AMR", "IF"), Slot("ST", "ST", "AF"),
+        Formation(name: "4-2-3-1", slots: back4 + [
+            Slot("LDM", "DM", "DLP", "oDM"), Slot("RDM", "DM", "B2B", "oPDM"),
+            Slot("LW", "AML", "W", "oTW"), Slot("AM", "AMC", "AP", "oAM"), Slot("RW", "AMR", "IF", "oW"),
+            Slot("ST", "ST", "CF", "oCF"),
         ]),
-        Formation(name: "4-4-2", slots: [
-            Slot("GK", "GK", "GK"), Slot("LB", "DL", "FB"), Slot("LCB", "DC", "CD"), Slot("RCB", "DC", "CD"),
-            Slot("RB", "DR", "FB"), Slot("LM", "ML", "W"), Slot("LCM", "MC", "B2B"), Slot("RCM", "MC", "CM"),
-            Slot("RM", "MR", "W"), Slot("LST", "ST", "AF"), Slot("RST", "ST", "TM"),
+        Formation(name: "4-2-3-1 Wide", slots: back4 + [
+            Slot("LCM", "MC", "CM", "oCM"), Slot("RCM", "MC", "MP", "oSCM"),
+            Slot("LW", "AML", "W", "oTW"), Slot("AM", "AMC", "AP", "oAM"), Slot("RW", "AMR", "IF", "oW"),
+            Slot("ST", "ST", "CF", "oCF"),
         ]),
-        Formation(name: "3-5-2", slots: [
-            Slot("GK", "GK", "GK"), Slot("LCB", "DC", "BPD"), Slot("CB", "DC", "CD"), Slot("RCB", "DC", "BPD"),
-            Slot("LWB", "WBL", "WB"), Slot("RWB", "WBR", "WB"), Slot("DM", "DM", "DM"),
-            Slot("LCM", "MC", "B2B"), Slot("RCM", "MC", "AP"), Slot("LST", "ST", "AF"), Slot("RST", "ST", "PF"),
+        Formation(name: "4-4-2", slots: back4 + [
+            Slot("LM", "ML", "W", "oWM"), Slot("LCM", "MC", "CM", "oPCM"), Slot("RCM", "MC", "MP", "oCM"),
+            Slot("RM", "MR", "WM", "oTWM"), Slot("LST", "ST", "CHF", "oCF"), Slot("RST", "ST", "TF", "oCOCF"),
         ]),
-        Formation(name: "4-1-4-1", slots: [
-            Slot("GK", "GK", "SK"), Slot("LB", "DL", "WB"), Slot("LCB", "DC", "BPD"), Slot("RCB", "DC", "CD"),
-            Slot("RB", "DR", "WB"), Slot("DM", "DM", "DM"), Slot("LM", "ML", "W"), Slot("LCM", "MC", "B2B"),
-            Slot("RCM", "MC", "AP"), Slot("RM", "MR", "IW"), Slot("ST", "ST", "PF"),
+        Formation(name: "4-4-1-1", slots: back4 + [
+            Slot("LM", "ML", "W", "oWM"), Slot("LCM", "MC", "CM", "oPCM"), Slot("RCM", "MC", "MP", "oCM"),
+            Slot("RM", "MR", "WM", "oTWM"), Slot("AM", "AMC", "SS", "oTAM"), Slot("ST", "ST", "CF", "oCF"),
         ]),
+        Formation(name: "4-1-4-1", slots: back4 + [
+            Slot("DM", "DM", "DM", "oSDM"), Slot("LM", "ML", "W", "oTWM"), Slot("LCM", "MC", "CHM", "oPCM"),
+            Slot("RCM", "MC", "MP", "oCM"), Slot("RM", "MR", "IW", "oWM"), Slot("ST", "ST", "CF", "oTCF"),
+        ]),
+        Formation(name: "4-4-2 Diamond", slots: back4 + [
+            Slot("DM", "DM", "DM", "oSDM"), Slot("LCM", "MC", "CHM", "oPCM"), Slot("RCM", "MC", "CM", "oCM"),
+            Slot("AM", "AMC", "AP", "oAM"), Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "P", "oCOCF"),
+        ]),
+        Formation(name: "4-3-1-2", slots: back4 + [
+            Slot("LCM", "MC", "CHM", "oPCM"), Slot("CM", "MC", "CM", "oSCM"), Slot("RCM", "MC", "MP", "oCM"),
+            Slot("AM", "AMC", "AP", "oAM"), Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "CHF", "oCOCF"),
+        ]),
+        Formation(name: "3-5-2", slots: back3 + [
+            Slot("LWB", "WBL", "WB", "oWB"), Slot("RWB", "WBR", "WB", "oWB"), Slot("DM", "DM", "DLP", "oSDM"),
+            Slot("LCM", "MC", "CHM", "oPCM"), Slot("RCM", "MC", "AP", "oCM"),
+            Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "CHF", "oTCF"),
+        ]),
+        Formation(name: "3-4-3", slots: back3 + [
+            Slot("LM", "ML", "WM", "oWM"), Slot("LCM", "MC", "CM", "oPCM"), Slot("RCM", "MC", "MP", "oCM"),
+            Slot("RM", "MR", "WM", "oWM"), Slot("LW", "AML", "IF", "oW"), Slot("RW", "AMR", "IF", "oW"),
+            Slot("ST", "ST", "CF", "oCF"),
+        ]),
+        Formation(name: "5-3-2", slots: back3 + [
+            Slot("LWB", "WBL", "WB", "oHWB"), Slot("RWB", "WBR", "WB", "oHWB"),
+            Slot("LCM", "MC", "CM", "oSCM"), Slot("CM", "MC", "MP", "oCM"), Slot("RCM", "MC", "CHM", "oPCM"),
+            Slot("LST", "ST", "CF", "oCF"), Slot("RST", "ST", "CHF", "oCOCF"),
+        ]),
+    ]
+
+    static let back4: [Slot] = [
+        Slot("GK", "GK", "GK", "oGK"), Slot("LB", "DL", "FB", "oFB"), Slot("LCB", "DC", "BPCB", "oCB"),
+        Slot("RCB", "DC", "CB", "oCCB"), Slot("RB", "DR", "FB", "oFB"),
+    ]
+    static let back3: [Slot] = [
+        Slot("GK", "GK", "GK", "oGK"), Slot("LCB", "DC", "WCB", "oWCB"), Slot("CB", "DC", "CB", "oCB"),
+        Slot("RCB", "DC", "WCB", "oWCB"),
     ]
 }
 
@@ -166,7 +229,23 @@ public struct SigningCriteria: Sendable, Equatable {
 public enum SquadBuilder {
     public static let minFamiliarity: UInt8 = 15
 
-    static func roleIndex(_ code: String) -> Int? { Roles.all.firstIndex { $0.code == code } }
+    static func roleIndex(_ code: String) -> Int? { Roles.index(code) }
+
+    /// How much of a slot's score comes from the In Possession role; the rest from the OOP role.
+    public static let ipShare = 0.6
+
+    /// A player's score in a slot: IP and OOP role scores blended.
+    public static func slotScore(_ r: PlayerRow, ip: Int?, oop: Int?) -> Double {
+        switch (ip, oop) {
+        case let (i?, o?): return ((ipShare * r.roleScores[i] + (1 - ipShare) * r.roleScores[o]) * 10).rounded() / 10
+        case let (i?, nil): return r.roleScores[i]
+        case let (nil, o?): return r.roleScores[o]
+        default: return 0
+        }
+    }
+    public static func slotScore(_ r: PlayerRow, _ slot: Slot) -> Double {
+        slotScore(r, ip: roleIndex(slot.role), oop: roleIndex(slot.oop))
+    }
 
     static func familiarity(_ r: PlayerRow, _ posIdx: Int?) -> UInt8 {
         guard let i = posIdx, let f = r.person.pos, i < f.count else { return 0 }
@@ -199,9 +278,10 @@ public enum SquadBuilder {
         struct Pair { let slot: Int; let row: Int; let score: Double }
         var pairs: [Pair] = []
         for (si, slot) in formation.slots.enumerated() {
-            guard let ri = roleIndex(slot.role) else { continue }
+            let ri = roleIndex(slot.role), oi = roleIndex(slot.oop)
+            guard ri != nil || oi != nil else { continue }
             for (pi, r) in squad.enumerated() where familiarity(r, posIndex[slot.position]) >= minFamiliarity {
-                pairs.append(Pair(slot: si, row: pi, score: r.roleScores[ri]))
+                pairs.append(Pair(slot: si, row: pi, score: slotScore(r, ip: ri, oop: oi)))
             }
         }
         pairs.sort { $0.score > $1.score }
@@ -255,13 +335,14 @@ public enum SquadBuilder {
     public static func suggestions(for a: SlotAnalysis, report: SquadReport, rows: [PlayerRow], meta: ExportMeta,
                                    criteria c: SigningCriteria, interest model: InterestModel? = nil, season: Int = 0,
                                    limit: Int = 40) -> [Suggestion] {
-        guard let ri = roleIndex(a.slot.role) else { return [] }
+        let ri = roleIndex(a.slot.role), oi = roleIndex(a.slot.oop)
+        guard ri != nil || oi != nil else { return [] }
         let posIdx = meta.positionKeys.firstIndex(of: a.slot.position)
         let baseline = c.forDepth ? (a.backup == nil ? 0 : a.backupScore) : (a.starter == nil ? 0 : a.starterScore)
         var out: [Suggestion] = []
         for r in rows where r.person.club != report.club {
             guard familiarity(r, posIdx) >= minFamiliarity, r.age >= c.minAge, r.age <= c.maxAge else { continue }
-            let score = r.roleScores[ri]
+            let score = slotScore(r, ip: ri, oop: oi)
             let gain = score - baseline
             guard gain >= c.minGain else { continue }
             if c.maxValueGbp > 0 { guard let v = r.person.val, v <= c.maxValueGbp else { continue } }

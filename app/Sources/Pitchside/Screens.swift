@@ -261,12 +261,13 @@ struct SquadView: View {
 
     private func suggestionsPane(_ report: SquadReport) -> some View {
         let slot = report.slots.first { $0.slot.label == store.selectedSlot }
-        let role = slot.flatMap { s in Roles.all.first { $0.code == s.slot.role } }
+        let role = slot.flatMap { s in Roles.role(s.slot.role) }
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 if let slot, let role {
                     Text("Signings for \(slot.slot.label)").font(.headline)
-                    Text(role.name).foregroundStyle(.secondary)
+                    Text(role.name + (slot.slot.oop.isEmpty ? "" : " · " + (Roles.role(slot.slot.oop)?.name ?? "") + " (OOP)"))
+                        .foregroundStyle(.secondary)
                     Text(String(format: "must beat %.1f", store.signForDepth ? slot.backupScore : slot.starterScore))
                         .font(.callout).padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Theme.panelAlt, in: Capsule())
@@ -441,7 +442,8 @@ struct SlotMarker: View {
                 .lineLimit(1)
                 .foregroundStyle(.white)
             HStack(spacing: 4) {
-                Text(a.slot.role).font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                Text(a.slot.oop.isEmpty ? a.slot.role : "\(a.slot.role)/\(a.slot.oop.dropFirst())")
+                    .font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                 Text(a.starter == nil ? "empty" : String(format: "%.1f", a.starterScore))
                     .font(.system(size: 10, weight: .bold)).monospacedDigit()
                     .foregroundStyle(a.starter == nil ? Color.red : AttrColor.color(Int(a.starterScore.rounded())))
@@ -475,10 +477,17 @@ struct SlotMenu: View {
                     }
                 }
             }
-            Menu("Role") {
+            Menu("In possession role") {
                 ForEach(Formations.roles(for: slot.position)) { r in
                     Button { store.setSlotRole(i, r.code) } label: {
                         if r.code == slot.role { Label(r.name, systemImage: "checkmark") } else { Text(r.name) }
+                    }
+                }
+            }
+            Menu("Out of possession role") {
+                ForEach(Formations.oopRoles(for: slot.position)) { r in
+                    Button { store.setSlotOOP(i, r.code) } label: {
+                        if r.code == slot.oop { Label(r.name, systemImage: "checkmark") } else { Text(r.name) }
                     }
                 }
             }
@@ -497,7 +506,8 @@ struct SlotCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(a.slot.label).font(.headline)
-                Text(Roles.all.first { $0.code == a.slot.role }?.name ?? a.slot.role).foregroundStyle(.secondary)
+                Text(Roles.role(a.slot.role)?.name ?? a.slot.role).foregroundStyle(.secondary)
+                if let o = Roles.role(a.slot.oop) { Text("· \(o.name) (OOP)").foregroundStyle(.secondary) }
                 Spacer()
             }
             if let i = store.slotIndex(a.slot.label) { editor(i) }
@@ -517,7 +527,9 @@ struct SlotCard: View {
     private func editor(_ i: Int) -> some View {
         let slot = store.workingFormation.slots[i]
         let natural = Formations.roles(for: slot.position)
-        let others = Roles.all.filter { r in !natural.contains { $0.code == r.code } }
+        let others = Roles.inPossession.filter { r in !natural.contains { $0.code == r.code } }
+        let naturalOOP = Formations.oopRoles(for: slot.position)
+        let othersOOP = Roles.outOfPossession.filter { r in !naturalOOP.contains { $0.code == r.code } }
         return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
             GridRow {
                 Text("Position").foregroundStyle(.secondary)
@@ -529,13 +541,26 @@ struct SlotCard: View {
                 .labelsHidden()
             }
             GridRow {
-                Text("Role").foregroundStyle(.secondary)
-                Picker("Role", selection: Binding(get: { slot.role }, set: { store.setSlotRole(i, $0) })) {
+                Text("In possession").foregroundStyle(.secondary)
+                Picker("In possession", selection: Binding(get: { slot.role }, set: { store.setSlotRole(i, $0) })) {
                     SwiftUI.Section("Suits \(Formations.positionName(slot.position).lowercased())") {
                         ForEach(natural) { Text($0.name).tag($0.code) }
                     }
                     SwiftUI.Section("Other roles") {
                         ForEach(others) { Text($0.name).tag($0.code) }
+                    }
+                }
+                .labelsHidden()
+            }
+            GridRow {
+                Text("Out of possession").foregroundStyle(.secondary)
+                Picker("Out of possession", selection: Binding(get: { slot.oop }, set: { store.setSlotOOP(i, $0) })) {
+                    Text("None (judge on IP only)").tag("")
+                    SwiftUI.Section("Suits \(Formations.positionName(slot.position).lowercased())") {
+                        ForEach(naturalOOP) { Text($0.name).tag($0.code) }
+                    }
+                    SwiftUI.Section("Other roles") {
+                        ForEach(othersOOP) { Text($0.name).tag($0.code) }
                     }
                 }
                 .labelsHidden()

@@ -133,6 +133,20 @@ final class Store {
         didSet { squadRows.sort(using: squadSort) }
     }
     var selectedSlot: String? { didSet { refreshSuggestions() } }
+
+    // MARK: Tactics advisor state
+    /// Every formation fitted to your squad, best first.
+    private(set) var tacticsFits: [TacticsAdvisor.FormationFit] = []
+    /// The formation being looked at in Tactics (nil = the best one).
+    var tacticsChoice: String? { didSet { refreshTacticsDetail() } }
+    var tacticsStance: Int = UserDefaults.standard.object(forKey: "tacticsStance") as? Int ?? 1 {
+        didSet { UserDefaults.standard.set(tacticsStance, forKey: "tacticsStance"); refreshTacticsDetail() }
+    }
+    private(set) var tacticsSetPieces: TacticsAdvisor.SetPieces?
+    private(set) var tacticsInstructions: TacticsAdvisor.Instructions?
+    var tacticsFit: TacticsAdvisor.FormationFit? {
+        tacticsFits.first { $0.formation.name == tacticsChoice } ?? tacticsFits.first
+    }
     var suggestions: [SquadBuilder.Suggestion] = []
     var clubs: [String] = []
     var nations: [String] = []
@@ -576,6 +590,20 @@ final class Store {
         edit(f, select: index)
     }
 
+    func setSlotOOP(_ index: Int, _ role: String) {
+        var f = workingFormation
+        guard f.slots.indices.contains(index) else { return }
+        f.slots[index].oop = role
+        edit(f, select: index)
+    }
+
+    /// Takes a formation (with its roles) from the tactics advisor into the squad builder.
+    func useFormation(_ f: Formation) {
+        formationName = f.name
+        formationEdited = true
+        workingFormation = f
+    }
+
     func addSlot(_ position: String) {
         let (f, i) = Formations.adding(position, to: workingFormation)
         edit(f, select: i)
@@ -607,7 +635,8 @@ final class Store {
 
     func refreshSquad() {
         guard let meta, !myClub.isEmpty, !allPlayers.isEmpty else {
-            squadReport = nil; suggestions = []; clubTeams = []; squadTimeline = []; return
+            squadReport = nil; suggestions = []; clubTeams = []; squadTimeline = []
+            tacticsFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; return
         }
         ensureInterestModel()
         let side = teamRows
@@ -621,12 +650,29 @@ final class Store {
         squadTimeline = SquadBuilder.timeline(club: myClub, formation: formation, squad: squadReport?.squad ?? [],
                                               meta: meta, season: season)
         buildSquadRows()
+        refreshTactics()
         if columns(for: "players").contains(where: { $0.id == "gen.interest" }) { refilter() }
         if selectedSlot == nil || !(squadReport?.slots.contains { $0.slot.label == selectedSlot } ?? false) {
             selectedSlot = squadReport?.slots.max { $0.weakness < $1.weakness }?.slot.label
         } else {
             refreshSuggestions()
         }
+    }
+
+    func refreshTactics() {
+        guard let meta, let report = squadReport else {
+            tacticsFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; return
+        }
+        let shapes = Formations.all + customFormations.filter { c in !Formations.all.contains { $0.name == c.name } }
+        tacticsFits = TacticsAdvisor.rankFormations(shapes, squad: report.squad, meta: meta)
+        refreshTacticsDetail()
+    }
+
+    private func refreshTacticsDetail() {
+        guard let meta, let fit = tacticsFit else { tacticsSetPieces = nil; tacticsInstructions = nil; return }
+        tacticsSetPieces = TacticsAdvisor.setPieces(xi: fit.picks.compactMap(\.player), bench: fit.bench, meta: meta)
+        tacticsInstructions = TacticsAdvisor.instructions(fit, meta: meta,
+                                                          stance: TacticsAdvisor.Stance(rawValue: tacticsStance) ?? .even)
     }
 
     private func buildSquadRows() {

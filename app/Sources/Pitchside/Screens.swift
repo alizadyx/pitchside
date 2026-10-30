@@ -119,7 +119,13 @@ struct SquadView: View {
                         Text("All teams").tag(-1)
                     }
                     .fixedSize()
-                    .help("First team, youth and reserve teams are told apart by their contracts")
+                    .help(store.teamsApproximate
+                          ? "This scan has no team data, so the first team is your best 30 and youth teams go by age. Rescan with the new plugin to use FM's real teams."
+                          : "First team, youth and reserve teams are told apart by their contracts")
+                    if store.teamsApproximate {
+                        Label("Estimated — rescan for real teams", systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                 }
                 Picker("Team", selection: $store.squadWomen) {
                     Text("Men").tag(false)
@@ -373,12 +379,13 @@ struct MySquadView: View {
                 .width(min: 60, ideal: 110, max: 180).customizationID("position")
                 TableColumn("Best role", value: \.bestRoleScore) { r in
                     HStack(spacing: 4) {
-                        Text(r.bestRole).foregroundStyle(.secondary).frame(minWidth: 26, alignment: .leading)
+                        Text(Roles.role(r.bestRole)?.short ?? r.bestRole).foregroundStyle(.secondary).lineLimit(1)
+                            .help(Roles.role(r.bestRole)?.name ?? r.bestRole)
                         Text(String(format: "%.1f", r.bestRoleScore)).monospacedDigit()
                             .foregroundStyle(AttrColor.color(Int(r.bestRoleScore.rounded())))
                     }
                 }
-                .width(min: 60, ideal: 80, max: 100).customizationID("best-role")
+                .width(min: 90, ideal: 170, max: 240).customizationID("best-role")
                 TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
                 TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                 TableColumn("Contract", value: \.expires) { r in

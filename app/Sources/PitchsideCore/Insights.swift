@@ -99,8 +99,11 @@ public struct ClubTeam: Identifiable, Hashable, Sendable {
     public let ageLimit: Int?
     /// 0 = first team, then other senior teams, then youth teams from oldest to youngest.
     public let rank: Int
+    /// True for the stand-in teams built from ages when the scan has no team data.
+    public var approximate = false
     public var isYouth: Bool { (ageLimit ?? 100) < 100 }
     public var label: String {
+        if approximate { return rank == 0 ? "First team (best 30)" : "Under \(ageLimit ?? 21) by age" }
         if let a = ageLimit, a < 100 { return "U\(a)" }
         if rank == 0 { return "First team" }
         return division.isEmpty ? "Reserves" : "Reserves (\(division))"
@@ -126,10 +129,33 @@ extension SquadBuilder {
             if ya, let x = a.value.age, let y = b.value.age, x != y { return x > y }   // U23, U21, U18…
             return a.value.rep != b.value.rep ? a.value.rep > b.value.rep : a.value.count > b.value.count
         }
-        return sorted.enumerated().map { i, kv in
+        let real = sorted.enumerated().map { i, kv in
             ClubTeam(id: kv.key, division: kv.value.div.max { $0.value < $1.value }?.key ?? "",
                      reputation: kv.value.rep, count: kv.value.count, ageLimit: kv.value.age, rank: i)
         }
+        if !real.isEmpty { return real }
+        // Older scans have no team data: approximate the first team by ability and youth teams by age.
+        let squad = rows.filter { $0.person.club == club }
+        guard squad.count > 30 else { return [] }
+        let div = Dictionary(grouping: squad.compactMap(\.person.div), by: { $0 }).max { $0.value.count < $1.value.count }?.key ?? ""
+        let rep = squad.compactMap(\.person.trep).max() ?? 0
+        var out = [ClubTeam(id: 0, division: div, reputation: rep, count: min(30, squad.count), ageLimit: nil, rank: 0, approximate: true)]
+        for (k, limit) in [21, 18].enumerated() {
+            let n = squad.filter { $0.age > 0 && $0.age < limit }.count
+            if n > 0 { out.append(ClubTeam(id: UInt32(k + 1), division: div, reputation: 0, count: n, ageLimit: limit, rank: k + 1, approximate: true)) }
+        }
+        return out
+    }
+
+    /// The club's players in `team` (all of them when `team` is nil).
+    public static func members(of team: ClubTeam?, club: String, rows: [PlayerRow]) -> [PlayerRow] {
+        let squad = rows.filter { $0.person.club == club }
+        guard let team else { return squad }
+        guard team.approximate else { return squad.filter { $0.person.tm == team.id } }
+        if team.rank == 0 {
+            return Array(squad.sorted { $0.person.ca > $1.person.ca }.prefix(30))
+        }
+        return squad.filter { $0.age > 0 && $0.age < (team.ageLimit ?? 21) }
     }
 
     // MARK: Timeline
@@ -166,38 +192,74 @@ extension SquadBuilder {
 // MARK: - Staff advice
 
 public enum StaffAdvisor {
+    /// Which jobs can do the work of an area. Matched against the job title, lowercased.
+    public enum JobGroup: Sendable, Hashable {
+        case coaching, setPieces, goalkeeping, fitness, youth, scouting, physio, sportsScience, analysis
+    }
+
     public struct Area: Sendable, Identifiable, Hashable {
         public var id: String { title }
         public let title: String
         public let keys: [String]
+        public let group: JobGroup
     }
 
     public static let areas: [Area] = [
-        Area(title: "Attacking coaching", keys: ["Attacking"]),
-        Area(title: "Defending coaching", keys: ["Defending"]),
-        Area(title: "Fitness coaching", keys: ["Fitness"]),
-        Area(title: "Goalkeeping coaching", keys: ["Goalkeeping"]),
-        Area(title: "Possession coaching", keys: ["Possession"]),
-        Area(title: "Set pieces", keys: ["SetPieces"]),
-        Area(title: "Tactical coaching", keys: ["Tactical"]),
-        Area(title: "Technical coaching", keys: ["Technical"]),
-        Area(title: "Youth development", keys: ["WorkingWithYoungsters"]),
-        Area(title: "Scouting", keys: ["JudgingAbility", "JudgingPotential"]),
-        Area(title: "Physio", keys: ["Physiotherapy"]),
-        Area(title: "Sports science", keys: ["SportsScience"]),
-        Area(title: "Data analysis", keys: ["DataAnalysis"]),
+        Area(title: "Attacking coaching", keys: ["Attacking"], group: .coaching),
+        Area(title: "Defending coaching", keys: ["Defending"], group: .coaching),
+        Area(title: "Fitness coaching", keys: ["Fitness"], group: .fitness),
+        Area(title: "Goalkeeping coaching", keys: ["Goalkeeping"], group: .goalkeeping),
+        Area(title: "Possession coaching", keys: ["Possession"], group: .coaching),
+        Area(title: "Set pieces", keys: ["SetPieces"], group: .setPieces),
+        Area(title: "Tactical coaching", keys: ["Tactical"], group: .coaching),
+        Area(title: "Technical coaching", keys: ["Technical"], group: .coaching),
+        Area(title: "Youth development", keys: ["WorkingWithYoungsters"], group: .youth),
+        Area(title: "Scouting", keys: ["JudgingAbility", "JudgingPotential"], group: .scouting),
+        Area(title: "Physio", keys: ["Physiotherapy"], group: .physio),
+        Area(title: "Sports science", keys: ["SportsScience"], group: .sportsScience),
+        Area(title: "Data analysis", keys: ["DataAnalysis"], group: .analysis),
     ]
+
+    /// Job title as FM27 shows it. Scans from 0.5 and earlier labelled set-piece coaches "Media Analyst".
+    public static func jobTitle(_ raw: String) -> String { raw == "Media Analyst" ? "Set Piece Coach" : raw }
+
+    /// Board members and executives: never suggested as staff and never counted as your coaches.
+    public static func isBoard(_ job: String) -> Bool {
+        let j = job.lowercased()
+        return ["chairman", "president", "owner", "director", "general manager", "chief executive", "ceo", "loan manager"]
+            .contains { j.contains($0) }
+    }
+
+    public static func fits(_ rawJob: String, _ g: JobGroup) -> Bool {
+        let j = jobTitle(rawJob).lowercased()
+        guard !j.isEmpty, !isBoard(j) else { return false }
+        let coach = (j.contains("coach") || j.contains("manager")) && !j.contains("goalkeeping") && !j.contains("gk coach")
+            && !j.contains("fitness")
+        switch g {
+        case .coaching: return coach && !j.contains("set piece")
+        case .setPieces: return coach
+        case .goalkeeping: return j.contains("goalkeeping") || j.contains("gk coach")
+        case .fitness: return j.contains("fitness")
+        case .youth: return coach || j.contains("youth")
+        case .scouting: return j.contains("scout") || j.contains("recruitment")
+        case .physio: return j.contains("physio") || j.contains("doctor")
+        case .sportsScience: return j.contains("sports scien") || j.contains("doctor") || j.contains("performance")
+        case .analysis: return j.contains("analys")
+        }
+    }
 
     public struct Candidate: Sendable, Identifiable {
         public let row: StaffRow
         public let score: Double
         public var id: UInt32 { row.id }
+        /// Why this person might say no ("works for a bigger club"), nil when realistic.
+        public let doubt: String?
     }
 
     public struct Advice: Sendable, Identifiable {
         public var id: String { area.id }
         public let area: Area
-        public let best: StaffRow?          // your best staff member in this area
+        public let best: StaffRow?          // your best staff member doing this job
         public let bestScore: Double
         public let candidates: [Candidate]
     }
@@ -211,22 +273,40 @@ public enum StaffAdvisor {
         return vals.count == keys.count ? vals.reduce(0, +) / Double(vals.count) : nil
     }
 
+    /// Would this person consider moving to a club of `clubRep` (team reputation, 0–10000)?
+    /// Free agents always would; staff at clearly bigger clubs, or far more famous than your club, wouldn't.
+    static func doubt(_ r: StaffRow, clubRep: Int?) -> String? {
+        guard let mine = clubRep, mine > 0 else { return nil }
+        if r.club.isEmpty { return nil }
+        if let theirs = r.person.trep, theirs > mine + 400 { return "works for a bigger club" }
+        if let rep = r.person.rep, rep > mine + 2500 { return "too big a name for your club" }
+        return nil
+    }
+
     /// Areas from weakest to strongest at your club, each with up to `limit` clear upgrades
-    /// (at least 2 points better), cheapest wage first among equals.
+    /// (at least 2 points better) whose job fits the area. People with no paid contract at a club
+    /// (board members, volunteers) are left out; free agents are kept. With `realistic`, people
+    /// unlikely to join a club of `clubRep` are left out too.
     public static func advise(club: String, staff: [StaffRow], meta: ExportMeta, maxWageGbp: Int = 0,
-                              limit: Int = 6) -> [Advice] {
+                              clubRep: Int? = nil, realistic: Bool = true, limit: Int = 6) -> [Advice] {
         let mine = staff.filter { $0.person.club == club }
-        let others = staff.filter { $0.person.club != club }
+        let others = staff.filter { r in
+            guard r.person.club != club else { return false }
+            if r.club.isEmpty { return true }                     // free agent
+            return (r.person.wage ?? 0) > 0                       // employed with a real contract
+        }
         let advice: [Advice] = areas.compactMap { area in
             guard area.keys.allSatisfy({ meta.staffAttrKeys.contains($0) }) else { return nil }
-            let scored = mine.compactMap { r in score(r, area.keys, meta).map { (r, $0) } }
+            let scored = mine.filter { fits($0.job, area.group) }.compactMap { r in score(r, area.keys, meta).map { (r, $0) } }
             let best = scored.max { $0.1 < $1.1 }
             let floor = (best?.1 ?? 0) + 2
             var cands: [Candidate] = []
-            for r in others {
+            for r in others where fits(r.job, area.group) || (r.club.isEmpty && !isBoard(r.job)) {
                 guard let sc = score(r, area.keys, meta), sc >= floor else { continue }
                 if maxWageGbp > 0, let w = r.person.wage, w > maxWageGbp { continue }
-                cands.append(Candidate(row: r, score: sc))
+                let d = doubt(r, clubRep: clubRep)
+                if realistic && d != nil { continue }
+                cands.append(Candidate(row: r, score: sc, doubt: d))
             }
             cands.sort { a, b in a.score != b.score ? a.score > b.score : (a.row.wage < 0 ? Int.max : a.row.wage) < (b.row.wage < 0 ? Int.max : b.row.wage) }
             return Advice(area: area, best: best?.0, bestScore: best?.1 ?? 0, candidates: Array(cands.prefix(limit)))

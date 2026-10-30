@@ -149,13 +149,14 @@ struct PlayersTable: View {
             TableColumn(roleTitle, value: \.selectedRoleScore) { r in
                 HStack(spacing: 4) {
                     if store.filter.roleCode.isEmpty {
-                        Text(r.bestRole).foregroundStyle(.secondary).frame(minWidth: 26, alignment: .leading)
+                        Text(Roles.role(r.bestRole)?.short ?? r.bestRole).foregroundStyle(.secondary).lineLimit(1)
+                            .help(Roles.role(r.bestRole)?.name ?? r.bestRole)
                     }
                     Text(String(format: "%.1f", r.selectedRoleScore)).monospacedDigit()
                         .foregroundStyle(AttrColor.color(Int(r.selectedRoleScore.rounded())))
                 }
             }
-            .width(min: 56, ideal: 76, max: 100).customizationID("role")
+            .width(min: 56, ideal: 170, max: 240).customizationID("role")
             TableColumnForEach(store.columns(for: "players")) { c in
                 TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r, store: store) }
                     .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)

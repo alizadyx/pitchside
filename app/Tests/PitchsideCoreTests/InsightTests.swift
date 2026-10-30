@@ -79,22 +79,56 @@ final class InsightTests: XCTestCase {
                        ["First team", "Reserves", "U21", "U18"])
     }
 
+    func testTeamsFallBackToAgesWithoutTeamData() {
+        var t = Factory()
+        var people: [Person] = []
+        for i in 0..<36 { people.append(t.make("Senior \(i)", club: "Old Scan FC", pos: ["MC"], level: 14, age: 26)) }
+        for i in 0..<10 { people.append(t.make("Kid \(i)", club: "Old Scan FC", pos: ["MC"], level: 8, age: 17)) }
+        for i in 0..<6 { people.append(t.make("Lad \(i)", club: "Old Scan FC", pos: ["MC"], level: 9, age: 20)) }
+        let r = rows(people)
+        let teams = SquadBuilder.teams(club: "Old Scan FC", rows: r)
+        XCTAssertEqual(teams.map(\.label), ["First team (best 30)", "Under 21 by age", "Under 18 by age"])
+        XCTAssertTrue(teams.allSatisfy(\.approximate))
+        let first = SquadBuilder.members(of: teams[0], club: "Old Scan FC", rows: r)
+        XCTAssertEqual(first.count, 30)
+        XCTAssertTrue(first.allSatisfy { $0.name.hasPrefix("Senior") })
+        XCTAssertEqual(SquadBuilder.members(of: teams[2], club: "Old Scan FC", rows: r).count, 10)
+        XCTAssertEqual(SquadBuilder.members(of: teams[1], club: "Old Scan FC", rows: r).count, 16)
+    }
+
     func testStaffAdvice() {
-        func person(_ id: UInt32, _ name: String, club: String?, _ s: [UInt8], wage: Int) -> Person {
+        func person(_ id: UInt32, _ name: String, club: String?, _ s: [UInt8], wage: Int?, job: String,
+                    trep: Int? = nil) -> Person {
             var p = Person(id: id, n: name, ca: 100, pa: 100); p.club = club; p.s = s; p.wage = wage; p.dob = "1980-01-01"
+            p.job = job; p.trep = trep
             return p
         }
         let staff = RowBuilder.staff([
-            person(1, "Our Coach", club: "Home FC", [8, 14, 9, 9], wage: 2000),
-            person(2, "Great Attacker", club: "Other", [17, 10, 5, 5], wage: 9000),
-            person(3, "Cheap Attacker", club: "Other", [13, 10, 5, 5], wage: 1000),
-            person(4, "Scout", club: "Other", [5, 5, 16, 15], wage: 1500),
+            person(1, "Our Coach", club: "Home FC", [8, 14, 9, 9], wage: 2000, job: "Coach", trep: 5000),
+            person(5, "Our Chairman", club: "Home FC", [18, 18, 18, 18], wage: 0, job: "Chairman", trep: 5000),
+            person(2, "Great Attacker", club: "Other", [17, 10, 5, 5], wage: 9000, job: "First-Team Coach", trep: 5000),
+            person(3, "Cheap Attacker", club: "Other", [13, 10, 5, 5], wage: 1000, job: "Assistant Manager", trep: 4000),
+            person(4, "Scout", club: "Other", [5, 5, 16, 15], wage: 1500, job: "Chief Scout", trep: 3000),
+            person(6, "Their President", club: "Big", [20, 20, 20, 20], wage: 0, job: "President", trep: 9000),
+            person(7, "Star Coach", club: "Big", [19, 10, 5, 5], wage: 20000, job: "Coach", trep: 9000),
+            person(8, "Unpaid Coach", club: "Other", [18, 10, 5, 5], wage: nil, job: "Coach", trep: 4000),
+            person(9, "Free Coach", club: nil, [16, 10, 5, 5], wage: nil, job: "", trep: nil),
+            person(10, "Set Piece Guy", club: "Other", [5, 5, 5, 5], wage: 1000, job: "Media Analyst", trep: 4000),
         ], reference: Ages.date("2026-07-13")!)
-        let advice = StaffAdvisor.advise(club: "Home FC", staff: staff, meta: meta)
-        XCTAssertEqual(advice.first?.area.title, "Attacking coaching", "weakest area first")
-        XCTAssertEqual(advice.first?.candidates.map(\.row.name), ["Great Attacker", "Cheap Attacker"])
-        let capped = StaffAdvisor.advise(club: "Home FC", staff: staff, meta: meta, maxWageGbp: 5000)
-        XCTAssertEqual(capped.first?.candidates.map(\.row.name), ["Cheap Attacker"])
+        let advice = StaffAdvisor.advise(club: "Home FC", staff: staff, meta: meta, clubRep: 5000)
+        let attacking = advice.first { $0.area.title == "Attacking coaching" }!
+        // Your chairman doesn't count as your coach; the board, unpaid people and bigger clubs' staff aren't suggested.
+        XCTAssertEqual(attacking.best?.name, "Our Coach")
+        XCTAssertEqual(attacking.candidates.map(\.row.name), ["Great Attacker", "Free Coach", "Cheap Attacker"])
+        let dreaming = StaffAdvisor.advise(club: "Home FC", staff: staff, meta: meta, clubRep: 5000, realistic: false)
+        let all = dreaming.first { $0.area.title == "Attacking coaching" }!
+        XCTAssertEqual(all.candidates.first?.row.name, "Star Coach")
+        XCTAssertEqual(all.candidates.first?.doubt, "works for a bigger club")
+        let capped = StaffAdvisor.advise(club: "Home FC", staff: staff, meta: meta, maxWageGbp: 5000, clubRep: 5000)
+        XCTAssertFalse(capped.first { $0.area.title == "Attacking coaching" }!.candidates.contains { $0.row.name == "Great Attacker" })
         XCTAssertEqual(advice.first { $0.area.title == "Scouting" }?.candidates.first?.row.name, "Scout")
+        XCTAssertEqual(StaffAdvisor.jobTitle("Media Analyst"), "Set Piece Coach")
+        XCTAssertTrue(StaffAdvisor.fits("Media Analyst", .setPieces))
+        XCTAssertFalse(StaffAdvisor.fits("Media Analyst", .coaching))
     }
 }

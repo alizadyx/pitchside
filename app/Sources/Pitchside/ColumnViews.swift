@@ -78,7 +78,7 @@ struct StatCell: View {
             score(row.meta)
         case "bestRole":
             HStack(spacing: 4) {
-                Text(row.bestRole).foregroundStyle(.secondary)
+                Text(Roles.role(row.bestRole)?.short ?? row.bestRole).foregroundStyle(.secondary).lineLimit(1)
                 score(row.bestRoleScore)
             }
         case "ca":
@@ -109,7 +109,8 @@ extension StatColumn {
     var idealWidth: CGFloat {
         if isAttribute { return 40 }
         switch key {
-        case "interest", "bestRole", "nation": return 92
+        case "interest", "nation": return 92
+        case "bestRole": return 170
         case "division": return 140
         default: return 70
         }

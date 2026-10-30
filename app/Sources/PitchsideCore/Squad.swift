@@ -274,25 +274,25 @@ public enum SquadBuilder {
         let squad = rows.filter { $0.person.club == club }
         let posIndex = Dictionary(uniqueKeysWithValues: meta.positionKeys.enumerated().map { ($1, $0) })
 
-        // Every (slot, player) pair a player can play, best first; fill greedily.
+        // Best possible XI (optimal assignment, not first-come), then the best backups from who's left.
         struct Pair { let slot: Int; let row: Int; let score: Double }
-        var pairs: [Pair] = []
+        var value = Array(repeating: [Double?](repeating: nil, count: squad.count), count: formation.slots.count)
         for (si, slot) in formation.slots.enumerated() {
             let ri = roleIndex(slot.role), oi = roleIndex(slot.oop)
             guard ri != nil || oi != nil else { continue }
             for (pi, r) in squad.enumerated() where familiarity(r, posIndex[slot.position]) >= minFamiliarity {
-                pairs.append(Pair(slot: si, row: pi, score: slotScore(r, ip: ri, oop: oi)))
+                value[si][pi] = slotScore(r, ip: ri, oop: oi)
             }
         }
-        pairs.sort { $0.score > $1.score }
-        var starter = [Int: Pair](), usedStarters = Set<Int>()
-        for p in pairs where starter[p.slot] == nil && !usedStarters.contains(p.row) {
-            starter[p.slot] = p; usedStarters.insert(p.row)
+        var starter = [Int: Pair]()
+        let xi = TacticsAdvisor.optimalAssignment(slots: formation.slots.count, players: squad.count) { value[$0][$1] }
+        for (si, p) in xi.enumerated() { if let p, let v = value[si][p] { starter[si] = Pair(slot: si, row: p, score: v) } }
+        let usedStarters = Set(starter.values.map(\.row))
+        var backup = [Int: Pair]()
+        let bench = TacticsAdvisor.optimalAssignment(slots: formation.slots.count, players: squad.count) { si, p in
+            usedStarters.contains(p) ? nil : value[si][p]
         }
-        var backup = [Int: Pair](), usedBackups = Set<Int>()
-        for p in pairs where backup[p.slot] == nil && !usedStarters.contains(p.row) && !usedBackups.contains(p.row) {
-            backup[p.slot] = p; usedBackups.insert(p.row)
-        }
+        for (si, p) in bench.enumerated() { if let p, let v = value[si][p] { backup[si] = Pair(slot: si, row: p, score: v) } }
 
         let starterScores = starter.values.map(\.score)
         let level = starterScores.isEmpty ? 0 : starterScores.reduce(0, +) / Double(starterScores.count)

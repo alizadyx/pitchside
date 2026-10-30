@@ -117,6 +117,8 @@ final class Store {
     var squadReport: SquadReport?
     /// The club's teams (first team, U21, U18…) found in contracts; empty with older scans.
     private(set) var clubTeams: [ClubTeam] = []
+    /// True when the scan has no team data and the teams shown are estimated from ability and age.
+    var teamsApproximate: Bool { clubTeams.first?.approximate ?? false }
     /// Which team the builder looks at: 0 = first team, n = n-th team by reputation, -1 = all teams.
     var squadTeamRank: Int = UserDefaults.standard.object(forKey: "squadTeamRank") as? Int ?? 0 {
         didSet { UserDefaults.standard.set(squadTeamRank, forKey: "squadTeamRank"); refreshSquad() }
@@ -643,8 +645,8 @@ final class Store {
         clubTeams = SquadBuilder.teams(club: myClub, rows: side)
         var rows = side
         if !clubTeams.isEmpty && squadTeamRank >= 0 {
-            let chosen = clubTeams[min(squadTeamRank, clubTeams.count - 1)].id
-            rows = side.filter { $0.person.club != myClub || $0.person.tm == chosen }
+            let chosen = clubTeams[min(squadTeamRank, clubTeams.count - 1)]
+            rows = side.filter { $0.person.club != myClub } + SquadBuilder.members(of: chosen, club: myClub, rows: side)
         }
         squadReport = SquadBuilder.analyse(club: myClub, formation: formation, rows: rows, meta: meta, season: season)
         squadTimeline = SquadBuilder.timeline(club: myClub, formation: formation, squad: squadReport?.squad ?? [],
@@ -693,7 +695,15 @@ final class Store {
     func refreshStaffAdvice() {
         guard let meta, !myClub.isEmpty else { staffAdvice = []; return }
         let cap = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
-        staffAdvice = StaffAdvisor.advise(club: myClub, staff: allStaff, meta: meta, maxWageGbp: cap)
+        let rep = clubTeams.first { $0.rank == 0 }?.reputation
+            ?? squadReport?.squad.compactMap(\.person.trep).max()
+        staffAdvice = StaffAdvisor.advise(club: myClub, staff: allStaff, meta: meta, maxWageGbp: cap,
+                                          clubRep: rep, realistic: staffRealistic)
+    }
+
+    /// Only suggest staff who would plausibly join (not from clearly bigger clubs).
+    var staffRealistic: Bool = UserDefaults.standard.object(forKey: "staffRealistic") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(staffRealistic, forKey: "staffRealistic"); refreshStaffAdvice() }
     }
 
     func refreshSuggestions() {

@@ -26,6 +26,17 @@ public struct Role: Sendable, Hashable, Identifiable {
     /// "Winger" or "Winger (OOP)": IP and OOP lists share some names.
     public var label: String { phase == .inPossession ? name : "\(name) (OOP)" }
     public var isIP: Bool { phase == .inPossession }
+
+    /// Compact name for table cells: "No-Nonsense CB", "Box-To-Box Mid".
+    public var short: String {
+        var n = name
+        for (a, b) in [("Centre-Back", "CB"), ("Full-Back", "FB"), ("Wing-Back", "WB"), ("Goalkeeper", "GK"),
+                       ("Defensive Midfielder", "DM"), ("Central Midfielder", "CM"), ("Attacking Midfielder", "AM"),
+                       ("Wide Midfielder", "WM"), ("Midfielder", "Mid"), ("Centre Forward", "CF"), ("Forward", "Fwd")] {
+            n = n.replacingOccurrences(of: a, with: b)
+        }
+        return n
+    }
 }
 
 /// Role scores for one player, aligned with `Roles.all`. Stored as tenths in a byte each, so a

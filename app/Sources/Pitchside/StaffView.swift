@@ -227,6 +227,14 @@ struct StaffAdviceView: View {
                 } else if store.staffAdvice.isEmpty {
                     Text("No staff data yet. Scan the game first.").foregroundStyle(.secondary)
                 } else {
+                    HStack {
+                        Toggle("Only staff likely to join", isOn: Binding(get: { store.staffRealistic },
+                                                                           set: { store.staffRealistic = $0 }))
+                            .help("Leaves out staff at clearly bigger clubs and big names who wouldn't move to your club")
+                        Spacer()
+                        Text("Only people whose job fits each area; board members and unpaid roles are left out.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     if store.wageBudget > 0 {
                         Text("Only staff within your wage budget of \(store.currency.symbol)\(store.wageBudget.formatted())/wk (set in Squad builder).")
                             .font(.callout).foregroundStyle(.secondary)
@@ -272,6 +280,9 @@ struct StaffAdviceView: View {
                             Text([c.row.job, c.row.club.isEmpty ? "Free agent" : c.row.club, "\(c.row.age)"]
                                     .filter { !$0.isEmpty }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            if let d = c.doubt {
+                                Text("Unlikely: \(d)").font(.caption2).foregroundStyle(.orange)
+                            }
                         }
                         Spacer(minLength: 4)
                         Text(c.row.wage >= 0 ? store.money(c.row.wage) + "/wk" : "—")

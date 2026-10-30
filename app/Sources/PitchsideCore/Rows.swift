@@ -49,7 +49,7 @@ public struct StaffRow: Identifiable, Sendable, Hashable {
     public let person: Person
     public var name: String { person.n }
     public var club: String { person.club ?? "" }
-    public var job: String { person.job ?? "" }
+    public var job: String { StaffAdvisor.jobTitle(person.job ?? "") }
     public var nation: String { person.nat ?? "" }
     public var ca: Int { person.ca }
     public var pa: Int { person.pa }

@@ -300,7 +300,7 @@ internal static partial class Dumper
         [1] = "Player", [2] = "Coach", [3] = "Player/Coach", [4] = "Chairman", [6] = "Director",
         [8] = "Managing Director", [10] = "Director of Football", [12] = "Physio", [14] = "Scout",
         [16] = "Manager", [17] = "Player/Manager", [20] = "Assistant Manager", [21] = "Player/Assistant Manager",
-        [22] = "Media Analyst", [24] = "General Manager", [26] = "Fitness Coach", [27] = "Player/Fitness Coach",
+        [22] = "Set Piece Coach", [24] = "General Manager", [26] = "Fitness Coach", [27] = "Player/Fitness Coach",
         [34] = "Goalkeeping Coach", [35] = "Player/GK Coach", [36] = "Head of Performance Analysis",
         [38] = "Club Doctor", [40] = "Head of Sports Science", [42] = "Data Analyst", [44] = "Chief Scout",
         [45] = "Player/Chief Scout", [46] = "Doctor", [48] = "Sports Scientist", [49] = "Player/Youth Coach",

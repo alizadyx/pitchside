@@ -148,6 +148,9 @@ internal sealed class Offsets
         public int TeamSchedule { get; set; } = 0xA0;   // → schedule object (0 = off)
         public int TeamDate { get; set; } = 0;          // FM date stored directly in the team (0 = off)
         public int TeamAgeLimit { get; set; } = 0x2C;   // byte: 100 senior, 21 = U21, 18 = U18… (0 = off)
+        public int TeamSquad { get; set; } = 0x38;      // the team's squad: pointer array, begin at +0, end at +8 (0 = off)
+        public string TeamType { get; set; } = "N2db4TEAME";
+        public string ClubType { get; set; } = "N2db4CLUBE";
         public int ScheduleNextMatch { get; set; } = 0x94; // FM date ≈ today
         public int ClubName { get; set; } = 0xC0;       // indirect string
         public int ClubShortName { get; set; } = 0xC8;

@@ -96,6 +96,28 @@ final class InsightTests: XCTestCase {
         XCTAssertEqual(SquadBuilder.members(of: teams[1], club: "Old Scan FC", rows: r).count, 16)
     }
 
+    func testLoansFollowWherePlayersPlay() {
+        var t = Factory()
+        var people = t.homeSquad()
+        var inbound = t.make("Loanee In", club: "Home FC", pos: ["ST"], level: 17)
+        inbound.own = "Big FC"
+        var outbound = t.make("Loanee Out", club: "Away FC", pos: ["ST"], level: 19)
+        outbound.own = "Home FC"
+        people += [inbound, outbound]
+        let r = rows(people)
+        XCTAssertEqual(SquadBuilder.loanedOut(club: "Home FC", rows: r).map(\.name), ["Loanee Out"])
+        XCTAssertTrue(SquadBuilder.members(of: nil, club: "Home FC", rows: r).contains { $0.name == "Loanee In" })
+        let meta = ExportMeta(scannedAt: nil, gameDate: nil, offsetsVersion: nil, offsetsVerified: nil, plugin: nil,
+                              scanMs: nil, playerAttrKeys: SquadTests.attrKeys, hiddenKeys: [],
+                              personalityKeys: ["Adaptability", "Ambition", "Loyalty", "Pressure"],
+                              positionKeys: SquadTests.posKeys, staffAttrKeys: [], warnings: nil)
+        let f = Formations.all.first { $0.name == "4-3-3" }!
+        let report = SquadBuilder.analyse(club: "Home FC", formation: f, rows: r, meta: meta, season: 2026)
+        let st = report.slots.first { $0.slot.position == "ST" }!
+        let names = SquadBuilder.suggestions(for: st, report: report, rows: r, meta: meta, criteria: SigningCriteria()).map(\.row.name)
+        XCTAssertFalse(names.contains("Loanee Out"), "your own loanee is not a signing")
+    }
+
     func testLeagueMap() {
         var t = Factory()
         var people: [Person] = []

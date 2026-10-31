@@ -19,6 +19,8 @@ internal static partial class Dumper
         public bool IsPlayer;
         public string Name, Surname, Nation, Club, Division, Dob, Expires, Foot;
         public int Ca, Pa, Height, Job, Gender, CurRep, WorldRep, StatusFlags, TeamRep, TeamAge;
+        /// <summary>The club that holds his contract, when he plays somewhere else (on loan).</summary>
+        public string OwnerClub;
         public long Value = -1, Asking = -1, Wage = -1;
         public ulong PersonAddr, ContractAddr, TeamAddr;
         public int Sub;
@@ -54,6 +56,8 @@ internal static partial class Dumper
         var teamCache = new ConcurrentDictionary<ulong, (string club, string div, int rep, int age)>();
         var dateVotes = new ConcurrentDictionary<uint, int>();
         var signedVotes = new ConcurrentDictionary<uint, int>();
+        var teamObjs = new ConcurrentDictionary<ulong, byte>();
+        string teamType = cfg.Club.TeamType;
         var vtCounts = new Dictionary<ulong, long>[Memory.Workers];
         for (int i = 0; i < vtCounts.Length; i++) vtCounts[i] = new();
         long skippedGender = 0, rejected = 0;
@@ -80,6 +84,11 @@ internal static partial class Dumper
                 var ci = mem.Class(v);
                 if (!ci.Valid) continue;
                 int sub = ci.SubObjectOffset;
+                if (sub == 0 && teamType != null && ci.TypeName == teamType)
+                {
+                    teamObjs.TryAdd(at + (ulong)i * 8, 0);
+                    continue;
+                }
                 bool isPlayer = playerSet.Contains(sub) && (playerTypes.Count == 0 || (ci.TypeName != null && playerTypes.Contains(ci.TypeName)));
                 bool isStaff = !isPlayer && staffSet.Contains(sub) && (staffTypes.Count == 0 || (ci.TypeName != null && staffTypes.Contains(ci.TypeName)));
                 if (!isPlayer && !isStaff) continue;
@@ -112,6 +121,12 @@ internal static partial class Dumper
 
         foreach (var uid in players.Keys) staff.TryRemove(uid, out _);   // player-coaches: keep as player
 
+        // Where each player actually plays: the squad lists kept on every team (first team, U21,
+        // U18, or another club's team while on loan). Contracts only say who owns him.
+        Status.Write("scanning", 0.91, "Reading squads…", mode: "dump", players: players.Count, staff: staff.Count);
+        string squadSummary = AssignSquads(mem, cfg, teamObjs.Keys.ToList(), players.Values.ToList(), teamCache, dateVotes);
+        Log.Info("Squads: " + squadSummary);
+
         // In-game date: the most recent contract signing (several players sign or renew every day
         // somewhere in the world). Needs at least two signings that day so one odd value can't skew it.
         string gameDate = null;
@@ -133,7 +148,8 @@ internal static partial class Dumper
 
         WriteExport(cfg, players.Values, staff.Values, gameDate, warnings, sw.ElapsedMilliseconds);
         WriteProbe(mem, cfg, req, players.Values.Concat(staff.Values));
-        if (!string.IsNullOrWhiteSpace(req.Club)) WriteClubProbe(mem, cfg, req.Club.Trim(), players.Values, staff.Values);
+        if (!string.IsNullOrWhiteSpace(req.Club))
+            WriteClubProbe(mem, cfg, req.Club.Trim(), players.Values, staff.Values, teamObjs.Keys.ToList(), squadSummary);
         WriteDiagnostics(mem, cfg, vtCounts, players.Count, staff.Count, skippedGender, rejected, unread, sw.ElapsedMilliseconds);
 
         Log.Info($"Scan done: {players.Count:N0} players, {staff.Count:N0} staff in {sw.ElapsedMilliseconds} ms");
@@ -286,6 +302,98 @@ internal static partial class Dumper
                 age is >= 14 and <= 100 ? age : 0);
     }
 
+    /// <summary>The class name of the object at <paramref name="obj"/>, or null.</summary>
+    private static string ClassName(Memory mem, ulong obj)
+    {
+        if (obj < 0x1000 || obj >= 0x0000_8000_0000_0000UL || mem.InAnyImage(obj)) return null;
+        ulong vt = mem.U64(obj);
+        if (!mem.InVtRange(vt)) return null;
+        var ci = mem.Class(vt);
+        return ci.Valid ? ci.TypeName : null;
+    }
+
+    /// <summary>A team's squad list as raw pointers (empty when it can't be read).</summary>
+    internal static ulong[] SquadList(Memory mem, Offsets cfg, ulong team)
+    {
+        int off = cfg.Club.TeamSquad;
+        if (off <= 0) return Array.Empty<ulong>();
+        ulong b = mem.Ptr(team + (ulong)off), e = mem.Ptr(team + (ulong)off + 8);
+        if (b == 0 || e <= b || (e - b) % 8 != 0 || e - b > 8 * 400) return Array.Empty<ulong>();
+        var raw = mem.ReadBytes(b, (int)(e - b));
+        if (raw == null) return Array.Empty<ulong>();
+        var list = new ulong[raw.Length / 8];
+        for (int i = 0; i < list.Length; i++) list[i] = BitConverter.ToUInt64(raw, i * 8);
+        return list;
+    }
+
+    /// <summary>
+    /// Moves every player listed in a club team's squad to that team: youth players to the U21/U18,
+    /// loanees to the club they're playing for (remembering the owner). National teams are skipped.
+    /// Players found in no list keep what their contract says.
+    /// </summary>
+    private static string AssignSquads(Memory mem, Offsets cfg, List<ulong> teamAddrs, List<Rec> players,
+        ConcurrentDictionary<ulong, (string club, string div, int rep, int age)> teams, ConcurrentDictionary<uint, int> votes)
+    {
+        try
+        {
+            if (cfg.Club.TeamSquad <= 0) return "squad lists off";
+            var byObj = new Dictionary<ulong, Rec>();
+            foreach (var r in players)
+            {
+                byObj[r.PersonAddr - (ulong)r.Sub] = r;
+                byObj.TryAdd(r.PersonAddr, r);
+            }
+            var placed = new Dictionary<Rec, List<ulong>>(ReferenceEqualityComparer.Instance);
+            int lists = 0, entries = 0, matched = 0, national = 0;
+            foreach (ulong t in teamAddrs)
+            {
+                var list = SquadList(mem, cfg, t);
+                if (list.Length == 0) continue;
+                if (cfg.Club.ClubType != null && ClassName(mem, mem.Ptr(t + (ulong)cfg.Club.TeamClub)) != cfg.Club.ClubType)
+                {
+                    national++;
+                    continue;
+                }
+                lists++;
+                foreach (ulong p in list)
+                {
+                    entries++;
+                    if (!byObj.TryGetValue(p, out var r)) continue;
+                    matched++;
+                    if (!placed.TryGetValue(r, out var l)) placed[r] = l = new List<ulong>();
+                    l.Add(t);
+                }
+            }
+            int loans = 0;
+            foreach (var (r, ts) in placed)
+            {
+                var options = ts.Distinct()
+                    .Select(t => (t, info: teams.GetOrAdd(t, x => ResolveTeam(mem, cfg, x, votes))))
+                    .Where(x => x.info.club != null)
+                    .ToList();
+                if (options.Count == 0) continue;
+                // Playing for another club beats the owner's lists; otherwise his club's top team.
+                var pick = options
+                    .OrderByDescending(x => r.Club != null && x.info.club != r.Club ? 1 : 0)
+                    .ThenByDescending(x => x.info.rep)
+                    .First();
+                if (r.Club != null && pick.info.club != r.Club) { r.OwnerClub = r.Club; loans++; }
+                r.Club = pick.info.club;
+                r.Division = pick.info.div ?? r.Division;
+                r.TeamRep = pick.info.rep;
+                r.TeamAge = pick.info.age;
+                r.TeamAddr = pick.t;
+            }
+            return $"{lists:N0} club squad lists ({national:N0} other lists skipped), {matched:N0} of {entries:N0} entries matched, " +
+                   $"{placed.Count:N0} players placed, {loans:N0} on loan";
+        }
+        catch (Exception e)
+        {
+            Log.Warn("squads: " + e.Message);
+            return "squad lists failed: " + e.Message;
+        }
+    }
+
     private static bool Plausible(string s)
     {
         if (string.IsNullOrWhiteSpace(s) || s.Length > 60) return false;
@@ -376,6 +484,7 @@ internal static partial class Dumper
             w.WriteNumber("trep", r.TeamRep);
             if (r.TeamAge > 0) w.WriteNumber("tage", r.TeamAge);   // 100 senior, 21 = U21…
         }
+        if (r.OwnerClub != null) w.WriteString("own", r.OwnerClub);   // on loan from
         w.WriteNumber("ca", r.Ca);
         w.WriteNumber("pa", r.Pa);
         w.WriteNumber("rep", r.CurRep);

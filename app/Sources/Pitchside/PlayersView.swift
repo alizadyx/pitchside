@@ -133,8 +133,14 @@ struct PlayersTable: View {
             }
             .width(min: 60, ideal: 110, max: 180).customizationID("position")
             TableColumn("Club", value: \.club) { r in
-                Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1)
-                    .foregroundStyle(r.club.isEmpty ? Color.secondary : Color.primary)
+                HStack(spacing: 4) {
+                    Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1)
+                        .foregroundStyle(r.club.isEmpty ? Color.secondary : Color.primary)
+                    if let own = r.person.own {
+                        Text("loan").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                            .help("On loan from \(own)")
+                    }
+                }
             }
             .width(min: 90, ideal: 160, max: 260).customizationID("club")
             TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }
@@ -491,6 +497,9 @@ struct PlayerDetail: View {
                     if row.isNew { Tag(text: "NEW", color: .purple) }
                 }
                 Text(p.club ?? "Free agent").font(.headline)
+                if let own = p.own {
+                    Text("On loan from \(own)").font(.callout.weight(.medium)).foregroundStyle(.orange)
+                }
                 if let d = p.div { Text(d).font(.callout).foregroundStyle(.secondary) }
                 Text(subtitle(p)).font(.callout).foregroundStyle(.secondary)
             }

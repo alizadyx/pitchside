@@ -117,6 +117,8 @@ final class Store {
     var squadReport: SquadReport?
     /// The club's teams (first team, U21, U18…) found in contracts; empty with older scans.
     private(set) var clubTeams: [ClubTeam] = []
+    /// Your players out on loan at other clubs.
+    private(set) var loanedOut: [PlayerRow] = []
     /// True when the scan has no team data and the teams shown are estimated from ability and age.
     var teamsApproximate: Bool { clubTeams.first?.approximate ?? false }
     /// Which team the builder looks at: 0 = first team, n = n-th team by reputation, -1 = all teams.
@@ -710,6 +712,7 @@ final class Store {
         ensureInterestModel()
         let side = teamRows
         clubTeams = SquadBuilder.teams(club: myClub, rows: side)
+        loanedOut = SquadBuilder.loanedOut(club: myClub, rows: side)
         var rows = side
         if !clubTeams.isEmpty && squadTeamRank >= 0 {
             let chosen = clubTeams[min(squadTeamRank, clubTeams.count - 1)]

@@ -8,7 +8,8 @@ namespace Pitchside;
 /// </summary>
 internal static partial class Dumper
 {
-    private static void WriteClubProbe(Memory mem, Offsets cfg, string club, ICollection<Rec> players, ICollection<Rec> staff)
+    private static void WriteClubProbe(Memory mem, Offsets cfg, string club, ICollection<Rec> players, ICollection<Rec> staff,
+                                       List<ulong> teamObjs = null, string squadSummary = null)
     {
         try
         {
@@ -65,7 +66,33 @@ internal static partial class Dumper
 
             var mine = players.Where(r => r.Club == club).ToList();
             var myStaff = staff.Where(r => r.Club == club).ToList();
-            sb.AppendLine($"{mine.Count} players and {myStaff.Count} staff whose contract team belongs to this club.");
+            sb.AppendLine($"{mine.Count} players and {myStaff.Count} staff at this club (players placed by squad lists where found).");
+
+            // 0. Squad lists: who each of the club's teams really holds (this is what placed players)
+            sb.AppendLine("\n#### SQUAD LISTS");
+            sb.AppendLine($"Whole database: {squadSummary ?? "not read"}; {teamObjs?.Count ?? 0:N0} team objects found.");
+            if (teamObjs != null)
+            {
+                var byObj = new Dictionary<ulong, Rec>();
+                foreach (var r in players) { byObj[r.PersonAddr - (ulong)r.Sub] = r; byObj.TryAdd(r.PersonAddr, r); }
+                foreach (ulong t in teamObjs.Where(t => ClubOfTeam(t) == club).OrderByDescending(t => mem.U16(t + (ulong)cfg.Club.TeamReputation)))
+                {
+                    var list = SquadList(mem, cfg, t);
+                    int age = cfg.Club.TeamAgeLimit > 0 ? mem.U8(t + (ulong)cfg.Club.TeamAgeLimit) : 0;
+                    sb.AppendLine($"\n== {CompOfTeam(t)} (age limit {age}, rep {mem.U16(t + (ulong)cfg.Club.TeamReputation)}) team @ {t:X}: {list.Length} entries");
+                    int shown = 0;
+                    foreach (ulong p in list)
+                    {
+                        if (byObj.TryGetValue(p, out var r))
+                            sb.AppendLine($"   {r.Name} (CA {r.Ca}, born {r.Dob})" + (r.OwnerClub != null ? $"  ON LOAN from {r.OwnerClub}" : ""));
+                        else if (shown++ < 10)
+                            sb.AppendLine($"   ? {p:X} -> {ClassOf(p) ?? "not an object"}");
+                    }
+                }
+            }
+            var loanedOut = players.Where(r => r.OwnerClub == club).OrderByDescending(r => r.Ca).ToList();
+            sb.AppendLine($"\nOut on loan ({loanedOut.Count}):");
+            foreach (var r in loanedOut) sb.AppendLine($"   {r.Name} (CA {r.Ca}) at {r.Club} ({r.Division})");
 
             // 1. Teams of the club
             sb.AppendLine("\n#### TEAMS");

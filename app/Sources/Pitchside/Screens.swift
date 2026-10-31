@@ -318,7 +318,9 @@ struct SquadView: View {
                 TableColumn("Name") { s in Text(s.row.name).fontWeight(.medium).lineLimit(1) }.width(min: 130, ideal: 180).customizationID("name")
                 TableColumn("Age") { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                 TableColumn("Club") { s in
-                    Text(s.row.club.isEmpty ? "Free agent" : s.row.club).lineLimit(1).foregroundStyle(.secondary)
+                    Text(s.row.club.isEmpty ? "Free agent" : s.row.club + (s.row.person.own.map { " (loan from \($0))" } ?? ""))
+                        .lineLimit(1).foregroundStyle(.secondary)
+                        .help(s.row.person.own.map { "On loan at \(s.row.club); you'd buy him from \($0)" } ?? s.row.club)
                 }
                 .width(min: 90, ideal: 140, max: 240).customizationID("club")
                 TableColumn("Role") { s in
@@ -450,6 +452,11 @@ struct MySquadView: View {
             HStack(spacing: 10) {
                 Text("\(store.squadRows.count) players").font(.callout.weight(.medium)).foregroundStyle(.secondary)
                 Text("XI = starting position in your formation").font(.caption).foregroundStyle(.tertiary)
+                if !store.loanedOut.isEmpty {
+                    Label("\(store.loanedOut.count) out on loan", systemImage: "arrow.up.forward.circle")
+                        .font(.caption).foregroundStyle(.orange)
+                        .help(store.loanedOut.map { "\($0.name) (CA \($0.ca)) at \($0.club)" }.joined(separator: "\n"))
+                }
                 Spacer()
                 ColumnsMenu(table: "squad")
             }
@@ -463,7 +470,15 @@ struct MySquadView: View {
                     .buttonStyle(.plain)
                 }
                 .width(20).customizationID("star")
-                TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
+                TableColumn("Name", value: \.name) { r in
+                    HStack(spacing: 4) {
+                        Text(r.name).fontWeight(.medium).lineLimit(1)
+                        if let own = r.person.own {
+                            Text("loan").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                                .help("On loan from \(own)")
+                        }
+                    }
+                }
                     .width(min: 130, ideal: 190).customizationID("name")
                 TableColumn("XI", value: \PlayerRow[extra: "xi"]) { r in
                     let t = store.squadRoleText[r.id]

@@ -81,9 +81,10 @@ public struct InterestModel: Sendable {
     public func assess(_ r: PlayerRow, joining club: String, season: Int) -> InterestAssessment? {
         let dest = pull(club)
         guard dest > 0 else { return nil }
-        if r.person.club == club { return nil }
-        let freeAgent = (r.person.club ?? "").isEmpty
-        let src = freeAgent ? 0 : pull(r.person.club ?? "")
+        if r.person.club == club || r.person.own == club { return nil }
+        let owner = r.person.own ?? r.person.club ?? ""      // a loanee is bought from his owner
+        let freeAgent = owner.isEmpty
+        let src = freeAgent ? 0 : pull(owner)
         let own = Double(r.person.rep ?? 0) * 0.92
         let need = max(src, own, 1)
         var score = dest / need

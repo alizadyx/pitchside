@@ -412,7 +412,7 @@ public enum SquadBuilder {
         let posIdx = meta.positionKeys.firstIndex(of: a.slot.position)
         let baseline = c.forDepth ? (a.backup == nil ? 0 : a.backupScore) : (a.starter == nil ? 0 : a.starterScore)
         var out: [Suggestion] = []
-        for r in rows where r.person.club != report.club {
+        for r in rows where r.person.club != report.club && r.person.own != report.club {
             guard familiarity(r, posIdx) >= minFamiliarity, r.age >= c.minAge, r.age <= c.maxAge else { continue }
             let score = slotScore(r, ip: ri, oop: oi)
             let gain = score - baseline

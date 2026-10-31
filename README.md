@@ -152,10 +152,11 @@ Patches can move data around in memory. If a scan finds very few players, or val
   age, contract and transfer status. Treat it as a guide.
 - The in-game date is worked out from the most recent contract signing in the database, so it can be
   a day or two behind. It's shown in the status bar; the season can be set by hand in Settings.
-- Players out on loan still count towards their parent club's team.
-- First team / U21 / U18 need a scan from plugin 0.4.1 or newer; with older scans the first team is
+- Players are placed by the squad lists FM keeps on each team (plugin 0.7.0 or newer): first team,
+  U21, U18, and loanees at the club they're playing for, marked "on loan from". Players missing from
+  every list keep the team their contract names; with scans older than 0.4.1 the first team is
   estimated as the best 30 and youth teams go by age.
-- A club's league is the division most of its players are registered in.
+- A club's league is the league of its highest-reputation team.
 - **Tactics advice comes from attributes only.** It doesn't know your opponents, your players' morale or
   how they've been playing, so treat it as a starting point and adjust in-game.
 - Out of Possession roles are scored on their key attributes only (FM's role cards list up to eight and

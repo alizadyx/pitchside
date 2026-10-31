@@ -29,6 +29,7 @@ public struct Person: Codable, Sendable, Hashable, Identifiable {
     public var tm: UInt32?      // which of the club's teams the contract is with
     public var trep: Int?       // that team's reputation (first team highest)
     public var tage: Int?       // that team's age limit: 100 senior, 21 = U21, 18 = U18…
+    public var own: String?     // on loan: the club that holds his contract (club = where he plays)
     public var ca: Int
     public var pa: Int
     public var rep: Int?

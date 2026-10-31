@@ -147,6 +147,11 @@ extension SquadBuilder {
         return out
     }
 
+    /// The club's players out on loan elsewhere, best first.
+    public static func loanedOut(club: String, rows: [PlayerRow]) -> [PlayerRow] {
+        rows.filter { $0.person.own == club && $0.person.club != club }.sorted { $0.person.ca > $1.person.ca }
+    }
+
     /// The club's players in `team` (all of them when `team` is nil).
     public static func members(of team: ClubTeam?, club: String, rows: [PlayerRow]) -> [PlayerRow] {
         let squad = rows.filter { $0.person.club == club }

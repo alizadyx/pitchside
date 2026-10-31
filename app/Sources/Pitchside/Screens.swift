@@ -337,16 +337,19 @@ struct SquadView: View {
             .padding(10)
             upgradesStrip
             Table(store.suggestions, selection: $picked, sortOrder: $store.signingSort, columnCustomization: $columnLayout) {
-                Group {
-                TableColumn("★") { s in
-                    Button { store.toggleShortlist(s.row.id) } label: {
-                        Image(systemName: store.shortlist.contains(s.row.id) ? "star.fill" : "star")
-                            .foregroundStyle(store.shortlist.contains(s.row.id) ? Theme.gold : Color.secondary.opacity(0.6))
+                // The shortlist star sits in the name cell: a table block takes at most 10 columns.
+                TableColumn("Name", value: \.name) { s in
+                    HStack(spacing: 6) {
+                        Button { store.toggleShortlist(s.row.id) } label: {
+                            Image(systemName: store.shortlist.contains(s.row.id) ? "star.fill" : "star")
+                                .foregroundStyle(store.shortlist.contains(s.row.id) ? Theme.gold : Color.secondary.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Add to or remove from your shortlist")
+                        Text(s.row.name).fontWeight(.medium).lineLimit(1)
                     }
-                    .buttonStyle(.plain)
                 }
-                .width(20).customizationID("star")
-                TableColumn("Name", value: \.name) { s in Text(s.row.name).fontWeight(.medium).lineLimit(1) }.width(min: 130, ideal: 180).customizationID("name")
+                .width(min: 150, ideal: 200).customizationID("name")
                 TableColumn("Age", value: \.age) { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                 TableColumn("Nat", value: \.nat) { s in Text(s.nat).lineLimit(1).foregroundStyle(.secondary).help(s.nat) }
                     .width(min: 50, ideal: 90, max: 140).customizationID("nat")
@@ -356,8 +359,6 @@ struct SquadView: View {
                         .help(s.row.person.own.map { "On loan at \(s.row.club); you'd buy him from \($0)" } ?? s.row.club)
                 }
                 .width(min: 90, ideal: 140, max: 240).customizationID("club")
-                }
-                Group {   // a table block takes at most 10 columns
                 TableColumn("Role", value: \.score) { s in
                     Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(store.scoreColor(s.score))
                 }
@@ -379,7 +380,6 @@ struct SquadView: View {
                         .foregroundStyle(s.row.club.isEmpty ? Color.green : Color.primary)
                 }
                 .width(min: 90, ideal: 120, max: 170).customizationID("value-wage")
-                }
                 TableColumnForEach(store.columns(for: "signings")) { c in
                     TableColumn(c.shortTitle, value: \SquadBuilder.Suggestion[extra: c.id]) { s in StatCell(column: c, row: s.row, store: store) }
                         .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)

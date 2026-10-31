@@ -38,6 +38,12 @@ internal static class TacticProbe
         Line($"Looking for tactic name \"{name}\". Heap: {mem.TotalRegionBytes / (1 << 20):N0} MB in {mem.Regions.Count:N0} regions.");
 
         var census = new ConcurrentDictionary<string, (long count, ulong sample)>();
+        // Objects of the classes most likely to hold the tactic, by class name (object starts only).
+        var targets = new ConcurrentDictionary<string, ConcurrentBag<ulong>>();
+        static bool IsTarget(string up) =>
+            (up.Contains("TACTIC") && !up.Contains("ADVICE") && !up.Contains("NEWS") && !up.Contains("NARRATIVE"))
+            || (up.Contains("FORMATION") && !up.Contains("FORMATTER"))
+            || up.Contains("INSTRUCTIONS_MANAGER") || up.Contains("TEAM_SELECTION") && !up.Contains("ADVICE");
         var textHits = new ConcurrentBag<ulong>();
         var insHits = new ConcurrentBag<(ulong at, ulong v)>();
         var roleHits = new ConcurrentBag<(ulong at, ulong v)>();
@@ -55,7 +61,10 @@ internal static class TacticProbe
                 int pos = from + i;
                 from = pos + 1;
                 int end = pos + needle.Length;
-                if (end < data.Length && data[end] == 0 && textHits.Count < 5000) textHits.Add(at + (ulong)pos);
+                // FM strings: [refcount u32][length u32][text] — keep only those, not copies in buffers.
+                if (end < data.Length && data[end] == 0 && pos >= 4 && textHits.Count < 5000
+                    && BinaryPrimitives.ReadInt32LittleEndian(data.Slice(pos - 4, 4)) == needle.Length)
+                    textHits.Add(at + (ulong)pos);
             }
             // instruction codes (4-byte aligned)
             var d = MemoryMarshal.Cast<byte, uint>(data.Slice(0, data.Length & ~3));
@@ -80,6 +89,11 @@ internal static class TacticProbe
                 if (!ClassWords.Any(up.Contains)) continue;
                 ulong here = at + (ulong)i * 8;
                 census.AddOrUpdate(ci.TypeName, (1, here), (_, o) => (o.count + 1, o.sample));
+                if (ci.SubObjectOffset == 0 && IsTarget(up))
+                {
+                    var bag = targets.GetOrAdd(ci.TypeName, _ => new ConcurrentBag<ulong>());
+                    if (bag.Count < 16) bag.Add(here);
+                }
             }
         }, p => Status.Write("scanning", 0.6 * p, "Tactic probe 1/2: searching memory…", mode: "tactics"));
 
@@ -96,7 +110,7 @@ internal static class TacticProbe
         var hits = textHits.Distinct().Take(40).ToList();
         var candidates = new Dictionary<ulong, ulong>();      // possible string-object address → text address
         foreach (var h in hits)
-            foreach (int delta in new[] { 0, 4, 8, 16, 24 })
+            foreach (int delta in new[] { 8, 4, 0 })
                 candidates.TryAdd(h - (ulong)delta, h);
         var refs = new ConcurrentBag<(ulong at, ulong target)>();
         if (candidates.Count > 0)
@@ -106,7 +120,7 @@ internal static class TacticProbe
             {
                 var q = MemoryMarshal.Cast<byte, ulong>(data.Slice(0, data.Length & ~7));
                 for (int i = 0; i < q.Length; i++)
-                    if (candidates.ContainsKey(q[i]) && refs.Count < 400) refs.Add((at + (ulong)i * 8, q[i]));
+                    if (candidates.ContainsKey(q[i]) && refs.Count < 20000) refs.Add((at + (ulong)i * 8, q[i]));
             }, p => Status.Write("scanning", 0.62 + 0.3 * p, "Tactic probe 2/2: following pointers to the name…", mode: "tactics"));
         }
         foreach (var h in hits.Take(10))
@@ -115,23 +129,37 @@ internal static class TacticProbe
             Line(Hex("    text-32", mem.ReadBytes(h - 32, 32 + Math.Min(needle.Length + 16, 96))));
         }
         Line();
-        Line($"== Objects pointing at the name: {refs.Count} ==");
-        int shown = 0;
-        foreach (var (at, target) in refs.Distinct().OrderBy(r => r.at))
+        var owned = refs.Distinct()
+            .Select(r => (r.at, r.target, o: Owner(mem, r.at, 0x2000)))
+            .Where(x => x.o.cls != null)
+            .OrderBy(x => x.o.cls).ToList();
+        Line($"== Game objects pointing at the name: {owned.Count} (of {refs.Count} raw pointers) ==");
+        foreach (var (at, target, o) in owned.Take(16))
         {
-            if (shown++ >= 12) break;
-            var (owner, cls) = Owner(mem, at, 0x1000);
-            Line($"\n-- pointer @ {at:X} → {target:X} (text @ {candidates[target]:X}); owner {cls ?? "?"} @ {owner:X} (field +0x{at - owner:X})");
-            if (owner != 0) DumpObject(mem, sb, owner, 0x600, depth: 1);
+            Line($"\n-- {o.cls} @ {o.owner:X}, field +0x{at - o.owner:X} → name string @ {target:X}");
+            DumpObject(mem, sb, o.owner, 0x800, depth: 1);
+        }
+
+        // ---------------------------------------------------------------- tactic classes
+        Line();
+        Line("== Objects of tactic-related classes ==");
+        var nameStrings = new HashSet<ulong>(candidates.Keys);
+        foreach (var kv in targets.OrderBy(kv => kv.Key))
+        {
+            var objs = kv.Value.Distinct().OrderBy(a => a).ToList();
+            Line($"\n#### {kv.Key}: {objs.Count} object(s)");
+            foreach (var obj in objs.Take(kv.Key.Contains("GAME_TACTIC_INFO") ? 12 : 3))
+            {
+                // Does this object (or anything it points to) reach the PSPROBE string?
+                var path = FindPath(mem, obj, nameStrings, 3);
+                Line($"\n-- {kv.Key} @ {obj:X}{(path != null ? "   *** reaches the tactic name via " + path : "")}");
+                DumpObject(mem, sb, obj, 0x400, depth: 1);
+            }
         }
 
         // ---------------------------------------------------------------- clusters
         ClusterReport(mem, sb, "Team-instruction code clusters", insHits.ToList(), 4,
             v => TacticCodes.Instructions.TryGetValue((uint)v, out var n) ? n : "?");
-        ClusterReport(mem, sb, "Role flag clusters", roleHits.ToList(), 4,
-            v => string.Join("|", new[] {
-                TacticCodes.InPossession.TryGetValue(v, out var a) ? "IP:" + a : null,
-                TacticCodes.OutOfPossession.TryGetValue(v, out var b) ? "OOP:" + b : null }.Where(x => x != null)));
 
         Line();
         Line($"Done in {sw.ElapsedMilliseconds:N0} ms. Instruction-code hits {insHits.Count:N0}, role-flag hits {roleHits.Count:N0}.");
@@ -164,14 +192,41 @@ internal static class TacticProbe
             else clusters.Add((items[0].at, items[^1].at, distinct, items));
         }
         sb.AppendLine($"  {clusters.Count:N0} clusters");
-        foreach (var c in clusters.OrderByDescending(c => c.distinct).Take(15))
+        foreach (var c in clusters.OrderByDescending(c => c.distinct).Take(60))
         {
             var (owner, cls) = Owner(mem, c.start, 0x1000);
+            if (cls == null) continue;      // not inside a game object (lookup tables, our own memory)
             sb.AppendLine($"\n-- {c.distinct} codes, {c.start:X}–{c.end:X}; owner {cls ?? "?"} @ {owner:X} (+0x{(owner == 0 ? 0 : c.start - owner):X})");
             foreach (var (at, v) in c.items.Take(40))
                 sb.AppendLine($"   +0x{at - c.start:X3} @ {at:X}  {decode(v)}");
             sb.AppendLine(Hex("   region", mem.ReadBytes(c.start - 0x40, (int)Math.Min(0x300, c.end - c.start + 0x80))));
         }
+    }
+
+    /// <summary>Breadth-first through pointers (0x400 bytes per object) looking for one of <paramref name="goals"/>.</summary>
+    private static string FindPath(Memory mem, ulong start, HashSet<ulong> goals, int maxDepth)
+    {
+        if (goals.Count == 0) return null;
+        var seen = new HashSet<ulong> { start };
+        var frontier = new List<(ulong obj, string path)> { (start, "") };
+        for (int depth = 0; depth < maxDepth && frontier.Count > 0; depth++)
+        {
+            var next = new List<(ulong, string)>();
+            foreach (var (obj, path) in frontier)
+            {
+                var b = mem.ReadBytes(obj, 0x400);
+                if (b == null) continue;
+                for (int off = 0; off + 8 <= b.Length; off += 8)
+                {
+                    ulong v = BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(off));
+                    if (goals.Contains(v)) return path + $"+0x{off:X}";
+                    if (v < 0x1000 || v >= 0x0000_8000_0000_0000UL || mem.InAnyImage(v) || !seen.Add(v)) continue;
+                    if (next.Count < 4000) next.Add((v, path + $"+0x{off:X}→"));
+                }
+            }
+            frontier = next;
+        }
+        return null;
     }
 
     /// <summary>The object containing <paramref name="addr"/>: nearest vtable at or before it.</summary>

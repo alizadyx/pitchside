@@ -22,6 +22,7 @@ internal static class Paths
 
     public static string Request => System.IO.Path.Combine(Dir, "request.json");
     public static string DumpFlag => System.IO.Path.Combine(Dir, "dump.flag");
+    public static string TacticFlag => System.IO.Path.Combine(Dir, "tactics.flag");
     public static string Status => System.IO.Path.Combine(Dir, "status.json");
     public static string Export => System.IO.Path.Combine(Dir, "export.json");
     public static string Offsets => System.IO.Path.Combine(Dir, "offsets.json");

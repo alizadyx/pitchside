@@ -16,7 +16,7 @@ public class Plugin : BasePlugin
 {
     public const string Id = "local.pitchside.plugin";
     public const string Name = "Pitchside";
-    public const string Version = "0.7.0";
+    public const string Version = "0.7.1";
 
     private static int _busy;
 
@@ -60,6 +60,13 @@ public class Plugin : BasePlugin
                     File.Delete(Paths.DumpFlag);
                     req = new Request { Mode = "dump", Id = "flag" };
                 }
+                else if (File.Exists(Paths.TacticFlag))
+                {
+                    // The file's text is the tactic's name as saved in FM (empty: "PSPROBE").
+                    string name = File.ReadAllText(Paths.TacticFlag).Trim();
+                    File.Delete(Paths.TacticFlag);
+                    req = new Request { Mode = "tactics", Id = "flag", Club = name };
+                }
                 if (req != null) Start(req);
             }
             catch (Exception e) { Pitchside.Log.Warn("poll: " + e.Message); }
@@ -80,6 +87,7 @@ public class Plugin : BasePlugin
             {
                 Pitchside.Log.Info($"Starting {req.Mode} ({req.Targets?.Count ?? 0} targets)");
                 if (string.Equals(req.Mode, "discover", StringComparison.OrdinalIgnoreCase)) Discovery.Run(req);
+                else if (string.Equals(req.Mode, "tactics", StringComparison.OrdinalIgnoreCase)) TacticProbe.Run(req);
                 else Dumper.Run(req);
             }
             catch (Exception e)

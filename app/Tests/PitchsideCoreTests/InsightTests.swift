@@ -116,6 +116,16 @@ final class InsightTests: XCTestCase {
         let st = report.slots.first { $0.slot.position == "ST" }!
         let names = SquadBuilder.suggestions(for: st, report: report, rows: r, meta: meta, criteria: SigningCriteria()).map(\.row.name)
         XCTAssertFalse(names.contains("Loanee Out"), "your own loanee is not a signing")
+
+        // Nationality filter
+        var c = SigningCriteria()
+        c.nationalities = SigningCriteria.nationalities(from: " ireland , Wales")
+        XCTAssertEqual(c.nationalities, ["ireland", "Wales"])
+        XCTAssertTrue(c.nationalityMatches("Republic of Ireland"))
+        XCTAssertTrue(c.nationalityMatches("Wales"))
+        XCTAssertFalse(c.nationalityMatches("England"))
+        XCTAssertFalse(c.nationalityMatches(nil))
+        XCTAssertTrue(SigningCriteria().nationalityMatches(nil), "no filter: everyone")
     }
 
     func testDateTextAndScoreScale() {

@@ -175,6 +175,13 @@ struct SquadView: View {
                     .help("Estimated from club and league size, the player's fame, ambition, loyalty, age, contract and transfer status. FM itself doesn't store this, so treat it as a guide.")
                     Toggle("Depth signing", isOn: $store.signForDepth)
                         .help("Compare with the backup instead of the starter")
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("Nationality")
+                        SuggestionField(placeholder: "Any", text: $store.signNationality, options: store.nations)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 170)
+                    }
+                    .help("Only suggest players of this nationality. Several: separate with commas (England, Wales).")
                 }
             }
             .font(.callout)
@@ -308,6 +315,7 @@ struct SquadView: View {
     }
 
     private func suggestionsPane(_ report: SquadReport) -> some View {
+        @Bindable var store = store
         let slot = report.slots.first { $0.slot.label == store.selectedSlot }
         let role = slot.flatMap { s in Roles.role(s.slot.role) }
         return VStack(alignment: .leading, spacing: 0) {
@@ -328,7 +336,7 @@ struct SquadView: View {
             }
             .padding(10)
             upgradesStrip
-            Table(store.suggestions, selection: $picked, columnCustomization: $columnLayout) {
+            Table(store.suggestions, selection: $picked, sortOrder: $store.signingSort, columnCustomization: $columnLayout) {
                 TableColumn("★") { s in
                     Button { store.toggleShortlist(s.row.id) } label: {
                         Image(systemName: store.shortlist.contains(s.row.id) ? "star.fill" : "star")
@@ -337,28 +345,30 @@ struct SquadView: View {
                     .buttonStyle(.plain)
                 }
                 .width(20).customizationID("star")
-                TableColumn("Name") { s in Text(s.row.name).fontWeight(.medium).lineLimit(1) }.width(min: 130, ideal: 180).customizationID("name")
-                TableColumn("Age") { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
-                TableColumn("Club") { s in
+                TableColumn("Name", value: \.name) { s in Text(s.row.name).fontWeight(.medium).lineLimit(1) }.width(min: 130, ideal: 180).customizationID("name")
+                TableColumn("Age", value: \.age) { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
+                TableColumn("Nat", value: \.nat) { s in Text(s.nat).lineLimit(1).foregroundStyle(.secondary).help(s.nat) }
+                    .width(min: 50, ideal: 90, max: 140).customizationID("nat")
+                TableColumn("Club", value: \.club) { s in
                     Text(s.row.club.isEmpty ? "Free agent" : s.row.club + (s.row.person.own.map { " (loan from \($0))" } ?? ""))
                         .lineLimit(1).foregroundStyle(.secondary)
                         .help(s.row.person.own.map { "On loan at \(s.row.club); you'd buy him from \($0)" } ?? s.row.club)
                 }
                 .width(min: 90, ideal: 140, max: 240).customizationID("club")
-                TableColumn("Role") { s in
+                TableColumn("Role", value: \.score) { s in
                     Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(store.scoreColor(s.score))
                 }
                 .width(min: 36, ideal: 42, max: 50).customizationID("role")
-                TableColumn("Gain") { s in
+                TableColumn("Gain", value: \.gain) { s in
                     Text(String(format: "+%.1f", s.gain)).monospacedDigit().fontWeight(.semibold).foregroundStyle(.green)
                 }
                 .width(min: 40, ideal: 46, max: 54).customizationID("gain")
-                TableColumn("CA/PA") { s in Text("\(s.row.ca)/\(s.row.pa)").monospacedDigit() }.width(min: 54, ideal: 60, max: 70).customizationID("ca-pa")
-                TableColumn("Interest") { s in
+                TableColumn("CA/PA", value: \.ca) { s in Text("\(s.row.ca)/\(s.row.pa)").monospacedDigit() }.width(min: 54, ideal: 60, max: 70).customizationID("ca-pa")
+                TableColumn("Interest", value: \.interestRank) { s in
                     InterestBadge(a: s.interest)
                 }
                 .width(min: 70, ideal: 92, max: 110).customizationID("interest")
-                TableColumn("Value · Wage") { s in
+                TableColumn("Value · Wage", value: \.valueSort) { s in
                     Text((s.row.club.isEmpty ? "Free transfer"
                           : Money.format(s.row.person.val, symbol: store.currency.symbol, perGbp: store.rate) + " · "
                             + Money.format(s.row.person.wage, symbol: store.currency.symbol, perGbp: store.rate)))
@@ -367,7 +377,7 @@ struct SquadView: View {
                 }
                 .width(min: 90, ideal: 120, max: 170).customizationID("value-wage")
                 TableColumnForEach(store.columns(for: "signings")) { c in
-                    TableColumn(c.shortTitle) { s in StatCell(column: c, row: s.row, store: store) }
+                    TableColumn(c.shortTitle, value: \SquadBuilder.Suggestion[extra: c.id]) { s in StatCell(column: c, row: s.row, store: store) }
                         .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
                 }
             }

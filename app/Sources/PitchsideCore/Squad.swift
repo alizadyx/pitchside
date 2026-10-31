@@ -295,7 +295,20 @@ public struct SigningCriteria: Sendable, Equatable {
     public var minInterest: InterestLevel? = nil   // only players at least this keen to join (needs a model)
     public var minGain = 0.5              // must beat the current starter by this much
     public var forDepth = false           // compare against the backup instead of the starter
+    /// Only these nationalities (matched loosely: "ireland" finds Republic of Ireland); empty = any.
+    public var nationalities: [String] = []
     public init() {}
+
+    /// Splits "England, Wales" into its names.
+    public static func nationalities(from text: String) -> [String] {
+        text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    func nationalityMatches(_ nat: String?) -> Bool {
+        guard !nationalities.isEmpty else { return true }
+        guard let nat, !nat.isEmpty else { return false }
+        return nationalities.contains { nat.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
 }
 
 public enum SquadBuilder {
@@ -401,6 +414,17 @@ public enum SquadBuilder {
         public let score: Double
         public let gain: Double
         public var interest: InterestAssessment? = nil
+
+        // Sort keys for the signings table.
+        public var name: String { row.name }
+        public var age: Int { row.age }
+        public var club: String { row.club }
+        public var nat: String { row.person.nat ?? "" }
+        public var ca: Int { row.ca }
+        public var interestRank: Int { interest?.level.rawValue ?? -1 }
+        /// Free agents cost nothing; unknown values sort last.
+        public var valueSort: Int { row.club.isEmpty ? 0 : (row.person.val ?? Int.max) }
+        public subscript(extra key: String) -> Double { row[extra: key] }
     }
 
     /// Players who would improve this slot, affordable and (optionally) keen enough to join.
@@ -413,7 +437,8 @@ public enum SquadBuilder {
         let baseline = c.forDepth ? (a.backup == nil ? 0 : a.backupScore) : (a.starter == nil ? 0 : a.starterScore)
         var out: [Suggestion] = []
         for r in rows where r.person.club != report.club && r.person.own != report.club {
-            guard familiarity(r, posIdx) >= minFamiliarity, r.age >= c.minAge, r.age <= c.maxAge else { continue }
+            guard familiarity(r, posIdx) >= minFamiliarity, r.age >= c.minAge, r.age <= c.maxAge,
+                  c.nationalityMatches(r.person.nat) else { continue }
             let score = slotScore(r, ip: ri, oop: oi)
             let gain = score - baseline
             guard gain >= c.minGain else { continue }

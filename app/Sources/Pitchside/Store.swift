@@ -124,6 +124,26 @@ final class Store {
     private(set) var interestModel: InterestModel?
     private var interestModelWomen: Bool?
     var signForDepth = false
+    /// Only sign players of these nationalities ("England" or "England, Wales"); empty = any.
+    var signNationality: String = UserDefaults.standard.string(forKey: "signNationality") ?? "" {
+        didSet { UserDefaults.standard.set(signNationality, forKey: "signNationality"); refreshSuggestions() }
+    }
+    /// The signings table's sort; empty keeps the default order (biggest gain, then younger and cheaper).
+    var signingSort: [KeyPathComparator<SquadBuilder.Suggestion>] = [] {
+        didSet { if !signingSort.isEmpty { suggestions.sort(using: signingSort) } }
+    }
+
+    func signingCriteria() -> SigningCriteria {
+        var c = SigningCriteria()
+        c.maxValueGbp = transferBudget > 0 ? Int(Double(transferBudget) / max(rate, 0.0001)) : 0
+        c.maxWageGbp = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
+        c.minAge = signMinAge
+        c.maxAge = signMaxAge
+        c.minInterest = minInterest > 0 ? InterestLevel(rawValue: minInterest) : nil
+        c.forDepth = signForDepth
+        c.nationalities = SigningCriteria.nationalities(from: signNationality)
+        return c
+    }
     var squadReport: SquadReport?
     /// The club's teams (first team, U21, U18…) found in contracts; empty with older scans.
     private(set) var clubTeams: [ClubTeam] = []
@@ -679,13 +699,7 @@ final class Store {
 
     func findUpgrades() {
         guard let meta, let report = squadReport, !upgradesBusy else { return }
-        var c = SigningCriteria()
-        c.maxValueGbp = transferBudget > 0 ? Int(Double(transferBudget) / max(rate, 0.0001)) : 0
-        c.maxWageGbp = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
-        c.minAge = signMinAge
-        c.maxAge = signMaxAge
-        c.minInterest = minInterest > 0 ? InterestLevel(rawValue: minInterest) : nil
-        c.forDepth = signForDepth
+        let c = signingCriteria()
         let rows = teamRows, model = interestModel, season = season
         upgradesBusy = true
         Task.detached(priority: .userInitiated) {
@@ -891,15 +905,17 @@ final class Store {
     func refreshSuggestions() {
         guard let meta, let report = squadReport,
               let slot = report.slots.first(where: { $0.slot.label == selectedSlot }) else { suggestions = []; return }
-        var c = SigningCriteria()
-        c.maxValueGbp = transferBudget > 0 ? Int(Double(transferBudget) / max(rate, 0.0001)) : 0
-        c.maxWageGbp = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
-        c.minAge = signMinAge
-        c.maxAge = signMaxAge
-        c.minInterest = minInterest > 0 ? InterestLevel(rawValue: minInterest) : nil
-        c.forDepth = signForDepth
-        suggestions = SquadBuilder.suggestions(for: slot, report: report, rows: teamRows, meta: meta, criteria: c,
-                                               interest: interestModel, season: season)
+        // Up to 200 so sorting by another column still has plenty to choose from.
+        var list = SquadBuilder.suggestions(for: slot, report: report, rows: teamRows, meta: meta,
+                                            criteria: signingCriteria(), interest: interestModel, season: season, limit: 200)
+        let cols = columns(for: "signings")
+        if !cols.isEmpty, let reader {
+            var rows = list.map(\.row)
+            reader.fill(&rows, cols, interest: interestScorer())
+            for i in list.indices { list[i].row = rows[i] }
+        }
+        if !signingSort.isEmpty { list.sort(using: signingSort) }
+        suggestions = list
     }
 
     // MARK: - Calibration files

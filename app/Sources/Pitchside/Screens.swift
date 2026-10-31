@@ -320,7 +320,7 @@ struct SquadView: View {
         let role = slot.flatMap { s in Roles.role(s.slot.role) }
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                if let slot, let role {
+                if let slot, role != nil {
                     Text("Signings for \(slot.slot.label)").font(.headline)
                     Text(RoleText.pair(slot.slot))
                         .foregroundStyle(.secondary)
@@ -337,6 +337,7 @@ struct SquadView: View {
             .padding(10)
             upgradesStrip
             Table(store.suggestions, selection: $picked, sortOrder: $store.signingSort, columnCustomization: $columnLayout) {
+                Group {
                 TableColumn("★") { s in
                     Button { store.toggleShortlist(s.row.id) } label: {
                         Image(systemName: store.shortlist.contains(s.row.id) ? "star.fill" : "star")
@@ -355,6 +356,8 @@ struct SquadView: View {
                         .help(s.row.person.own.map { "On loan at \(s.row.club); you'd buy him from \($0)" } ?? s.row.club)
                 }
                 .width(min: 90, ideal: 140, max: 240).customizationID("club")
+                }
+                Group {   // a table block takes at most 10 columns
                 TableColumn("Role", value: \.score) { s in
                     Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(store.scoreColor(s.score))
                 }
@@ -376,6 +379,7 @@ struct SquadView: View {
                         .foregroundStyle(s.row.club.isEmpty ? Color.green : Color.primary)
                 }
                 .width(min: 90, ideal: 120, max: 170).customizationID("value-wage")
+                }
                 TableColumnForEach(store.columns(for: "signings")) { c in
                     TableColumn(c.shortTitle, value: \SquadBuilder.Suggestion[extra: c.id]) { s in StatCell(column: c, row: s.row, store: store) }
                         .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)

@@ -27,9 +27,12 @@ struct PlayersView: View {
                     .help("Show or hide the filter panel")
                     PresetsMenu()
                 }
-                Text("\(store.players.count.formatted()) players")
+                Text(store.players.count == store.allPlayers.count
+                     ? "\(store.players.count.formatted()) players"
+                     : "\(store.players.count.formatted()) of \(store.allPlayers.count.formatted()) shown")
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .help("Players matching the Men/Women switch and your filters, out of everyone in the scan")
                 Spacer(minLength: 8)
                 ColumnsMenu(table: "players")
                 if shortlistOnly {
@@ -222,9 +225,9 @@ struct PlayerFilterPanel: View {
                         GridRow {
                             Text("Min CA")
                             HStack(spacing: 4) {
-                                NumberField(value: $store.filter.minCA, width: 44)
+                                NumberField(value: $store.filter.minCA, width: 44, zeroIsAny: true)
                                 Text("PA")
-                                NumberField(value: $store.filter.minPA, width: 44)
+                                NumberField(value: $store.filter.minPA, width: 44, zeroIsAny: true)
                             }
                         }
                     }
@@ -269,7 +272,7 @@ struct PlayerFilterPanel: View {
                         }
                         HStack {
                             Text("Min CA growth")
-                            NumberField(value: $store.filter.minGrowth, width: 44)
+                            NumberField(value: $store.filter.minGrowth, width: 44, zeroIsAny: true)
                         }
                         Toggle("New regens only", isOn: $store.filter.onlyNew)
                         Toggle("Free agents only", isOn: $store.filter.freeAgentsOnly)
@@ -279,9 +282,9 @@ struct PlayerFilterPanel: View {
                 FilterGroup(title: "Contract & money (\(store.currency.symbol))", active: active.contains("money")) {
                     VStack(alignment: .leading, spacing: 6) {
                         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
-                            GridRow { Text("Max value"); NumberField(value: $store.filter.maxValue, width: 120) }
-                            GridRow { Text("Max wage/wk"); NumberField(value: $store.filter.maxWage, width: 120) }
-                            GridRow { Text("Expires by"); NumberField(value: $store.filter.expiringBy, width: 120, grouping: false) }
+                            GridRow { Text("Max value"); NumberField(value: $store.filter.maxValue, width: 120, zeroIsAny: true) }
+                            GridRow { Text("Max wage/wk"); NumberField(value: $store.filter.maxWage, width: 120, zeroIsAny: true) }
+                            GridRow { Text("Expires by"); NumberField(value: $store.filter.expiringBy, width: 120, grouping: false, zeroIsAny: true) }
                         }
                         Toggle("Transfer listed only", isOn: $store.filter.listedOnly)
                         Toggle("Hide not for sale", isOn: $store.filter.hideNotForSale)
@@ -313,12 +316,22 @@ struct PositionPicker: View {
     @Binding var selected: Set<String>
     let keys: [String]
 
+    /// The pitch layout, with centre-back, sweeper and keeper spread out so the small buttons don't overlap.
+    static func point(_ k: String) -> PitchPoint? {
+        switch k {
+        case "DC": return PitchPoint(x: 0.5, y: 0.745)
+        case "SW": return PitchPoint(x: 0.5, y: 0.845)
+        case "GK": return PitchPoint(x: 0.5, y: 0.94)
+        default: return PitchLayout.point(k)
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 PitchBackground()
                 ForEach(keys, id: \.self) { k in
-                    if let pt = PitchLayout.point(k) {
+                    if let pt = Self.point(k) {
                         let on = selected.contains(k)
                         Button {
                             if on { selected.remove(k) } else { selected.insert(k) }
@@ -344,11 +357,21 @@ struct NumberField: View {
     @Binding var value: Int
     var width: CGFloat = 52
     var grouping = true
+    /// For limits where 0 means "no limit": show an empty box reading "Any" instead of 0.
+    var zeroIsAny = false
     var body: some View {
-        TextField("", value: $value, format: grouping ? .number : .number.grouping(.never))
-            .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.trailing)
-            .frame(width: width)
+        Group {
+            if zeroIsAny {
+                TextField("Any", text: Binding(
+                    get: { value == 0 ? "" : (grouping ? value.formatted() : String(value)) },
+                    set: { value = Int($0.filter(\.isNumber)) ?? 0 }))
+            } else {
+                TextField("", value: $value, format: grouping ? .number : .number.grouping(.never))
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .multilineTextAlignment(.trailing)
+        .frame(width: width)
     }
 }
 
@@ -520,7 +543,7 @@ struct PlayerDetail: View {
             }
             Stat(title: "Value", value: Money.format(p.val, symbol: sym, perGbp: rate))
             Stat(title: "Wage / week", value: Money.format(p.wage, symbol: sym, perGbp: rate))
-            Stat(title: "Contract", value: p.exp.map { String($0.prefix(7)) } ?? "—")
+            Stat(title: "Contract", value: p.exp.map { DateText.monthYear($0) } ?? "—")
             if p.lst == true { Stat(title: "Status", value: "Listed", color: .orange) }
             if p.nfs == true { Stat(title: "Status", value: "Not for sale", color: .red) }
         }

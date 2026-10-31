@@ -54,6 +54,9 @@ final class Store {
             UserDefaults.standard.set(genderFilter, forKey: "genderFilter")
             filter.gender = genderFilter
             staffFilter.gender = genderFilter
+            // Tactics and Compare teams follow the Men/Women switch; with Both they keep their own.
+            if genderFilter == 1, squadWomen { squadWomen = false }
+            if genderFilter == 2, !squadWomen { squadWomen = true }
             refreshSquad()
         }
     }
@@ -99,7 +102,14 @@ final class Store {
         didSet { Store.saveJSON(customFormations, "customFormations") }
     }
     /// Men's and women's sides share the club name, so the builder always looks at one of them.
-    var squadWomen: Bool = UserDefaults.standard.bool(forKey: "squadWomen") {
+    var squadWomen: Bool = {
+        // Starts on the side the Men/Women switch shows (its own choice only when that's on Both).
+        switch UserDefaults.standard.object(forKey: "genderFilter") as? Int ?? 1 {
+        case 1: return false
+        case 2: return true
+        default: return UserDefaults.standard.bool(forKey: "squadWomen")
+        }
+    }() {
         didSet { UserDefaults.standard.set(squadWomen, forKey: "squadWomen"); refreshSquad() }
     }
     var transferBudget = 0       // display currency; 0 = no limit
@@ -117,6 +127,16 @@ final class Store {
     var squadReport: SquadReport?
     /// The club's teams (first team, U21, U18…) found in contracts; empty with older scans.
     private(set) var clubTeams: [ClubTeam] = []
+    /// Colours squad scores against your XI level, and meta against your starters' average.
+    var squadScale: ScoreScale? { squadReport.map { ScoreScale(reference: $0.level) } }
+    var squadMetaScale: ScoreScale? {
+        guard let r = squadReport else { return nil }
+        let xi = r.slots.compactMap(\.starter)
+        guard !xi.isEmpty else { return nil }
+        return ScoreScale(reference: xi.map(\.meta).reduce(0, +) / Double(xi.count))
+    }
+    func scoreColor(_ v: Double) -> Color { RelColor.color(v, squadScale) }
+
     /// Your players out on loan at other clubs.
     private(set) var loanedOut: [PlayerRow] = []
     /// True when the scan has no team data and the teams shown are estimated from ability and age.

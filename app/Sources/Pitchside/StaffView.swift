@@ -70,7 +70,7 @@ struct StaffView: View {
                                             Text("–")
                                             NumberField(value: $store.staffFilter.maxAge)
                                         }
-                                        GridRow { Text("Min CA"); NumberField(value: $store.staffFilter.minCA) }
+                                        GridRow { Text("Min CA"); NumberField(value: $store.staffFilter.minCA, zeroIsAny: true) }
                                     }
                                 }
                                 FilterGroup(title: "Attributes", active: !f.rules.isEmpty) {
@@ -102,7 +102,7 @@ struct StaffView: View {
                         }
                         .width(min: 80, ideal: 120, max: 160).customizationID("attr")
                         TableColumn("Contract", value: \.expires) { r in
-                            Text(r.expires.isEmpty ? "—" : String(r.expires.prefix(7))).foregroundStyle(.secondary)
+                            Text(r.expires.isEmpty ? "—" : DateText.monthYear(r.expires)).foregroundStyle(.secondary)
                         }
                         .width(min: 54, ideal: 64, max: 80).customizationID("contract")
                     }
@@ -150,7 +150,7 @@ struct StaffDetail: View {
                     Stat(title: "CA", value: "\(p.ca)")
                     Stat(title: "PA", value: p.pa > 0 ? "\(p.pa)" : "—")
                     Stat(title: "Wage/wk", value: Money.format(p.wage, symbol: store.currency.symbol, perGbp: store.rate))
-                    Stat(title: "Contract", value: p.exp ?? "—")
+                    Stat(title: "Contract", value: p.exp.map { DateText.monthYear($0) } ?? "—")
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 10, alignment: .top)], spacing: 10) {
                     StaffAttrList(title: "Coaching", keys: AttributeGroups.staffCoaching, values: values)

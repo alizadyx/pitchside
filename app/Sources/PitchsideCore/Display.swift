@@ -166,3 +166,32 @@ public enum RadarAxes {
         }
     }
 }
+
+/// Dates as people read them.
+public enum DateText {
+    static let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    /// "2027-05-31" or "2027-05" → "May 2027"; anything else is returned as it is.
+    public static func monthYear(_ iso: String) -> String {
+        let parts = iso.split(separator: "-")
+        guard parts.count >= 2, let y = Int(parts[0]), let m = Int(parts[1]), (1...12).contains(m) else { return iso }
+        return "\(months[m - 1]) \(y)"
+    }
+}
+
+/// Colours a score by how it compares with a reference (usually your XI level), so the gaps
+/// inside one squad stand out even when every score sits in the same band of the 1–20 scale.
+public struct ScoreScale: Sendable, Hashable {
+    public let reference: Double
+    public init(reference: Double) { self.reference = reference }
+
+    /// 2 well above, 1 above, 0 about the same, -1 below, -2 well below.
+    public func tier(_ v: Double) -> Int {
+        let d = v - reference
+        if d >= 1.0 { return 2 }
+        if d >= 0.3 { return 1 }
+        if d > -0.5 { return 0 }
+        if d > -1.5 { return -1 }
+        return -2
+    }
+}

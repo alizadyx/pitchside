@@ -64,7 +64,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .players: "person.3.fill"
-        case .squad: "sportscourt.fill"
+        case .squad: "soccerball"
         case .compare: "chart.bar.xaxis"
         case .radar: "chart.line.uptrend.xyaxis"
         case .staff: "person.crop.rectangle.stack.fill"
@@ -83,7 +83,11 @@ struct ContentView: View {
         NavigationSplitView {
             List(selection: $section) {
                 ForEach(SidebarItem.allCases) { s in
-                    Label(s.title, systemImage: s.icon)
+                    Label {
+                        Text(s.title)
+                    } icon: {
+                        Image(systemName: s.icon).frame(width: 22, alignment: .center)
+                    }
                         .badge(badge(for: s))
                         .tag(s)
                 }

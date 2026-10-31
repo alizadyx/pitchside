@@ -17,6 +17,24 @@ enum Theme {
                                   Color(red: 0.92, green: 0.35, blue: 0.75)]
 }
 
+/// Colours for ScoreScale tiers: green above the reference, plain around it, orange and red below.
+enum RelColor {
+    static func color(_ tier: Int) -> Color {
+        switch tier {
+        case 2...: return Color(red: 0.35, green: 0.85, blue: 0.45)
+        case 1: return Color(red: 0.62, green: 0.82, blue: 0.48)
+        case 0: return .primary
+        case -1: return .orange
+        default: return Color(red: 0.95, green: 0.35, blue: 0.3)
+        }
+    }
+
+    static func color(_ v: Double, _ scale: ScoreScale?) -> Color {
+        guard let scale else { return AttrColor.color(Int(v.rounded())) }
+        return color(scale.tier(v))
+    }
+}
+
 enum AttrColor {
     /// FM-like bands: weak red, ordinary amber, good green, elite bright green.
     static func color(_ v: Int) -> Color {
@@ -222,7 +240,8 @@ struct RadarChart: View {
             let n = axes.count
             guard n >= 3 else { return }
             let c = CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = min(size.width, size.height) / 2 - 34
+            // Leave room for the axis names on every side so long ones aren't cut off.
+            let radius = max(40, min(size.width / 2 - 96, size.height / 2 - 26))
             func pt(_ i: Int, _ v: Double) -> CGPoint {
                 let a = -Double.pi / 2 + 2 * Double.pi * Double(i) / Double(n)
                 let r = radius * CGFloat(v / 20)
@@ -237,8 +256,10 @@ struct RadarChart: View {
             for i in 0..<n {
                 var p = Path(); p.move(to: c); p.addLine(to: pt(i, 20))
                 ctx.stroke(p, with: .color(.white.opacity(0.1)), lineWidth: 1)
-                let lp = pt(i, 23.5)
-                ctx.draw(Text(axes[i]).font(.caption).foregroundStyle(.secondary), at: lp)
+                let lp = pt(i, 21.5)
+                let dx = lp.x - c.x
+                let anchor: UnitPoint = dx > radius * 0.2 ? .leading : dx < -radius * 0.2 ? .trailing : (lp.y < c.y ? .bottom : .top)
+                ctx.draw(Text(axes[i]).font(.caption).foregroundStyle(.secondary), at: lp, anchor: anchor)
             }
             for (si, values) in series.enumerated() {
                 var p = Path()
@@ -249,5 +270,15 @@ struct RadarChart: View {
                 ctx.stroke(p, with: .color(col), lineWidth: 2)
             }
         }
+    }
+}
+
+/// How a slot's roles read in headings.
+enum RoleText {
+    /// "Central Midfielder (in and out of possession)" when both are the same, else "IP · OOP (OOP)".
+    static func pair(_ slot: Slot) -> String {
+        let ip = Roles.role(slot.role)?.name ?? slot.role
+        guard let oop = Roles.role(slot.oop)?.name else { return ip }
+        return oop == ip ? "\(ip) (in and out of possession)" : "\(ip) · \(oop) (OOP)"
     }
 }

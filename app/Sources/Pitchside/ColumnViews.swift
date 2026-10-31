@@ -44,6 +44,8 @@ struct StatCell: View {
     let column: StatColumn
     let row: PlayerRow
     let store: Store
+    /// When set (your squad), meta is coloured against your starters' average instead of the 1–20 bands.
+    var metaScale: ScoreScale? = nil
 
     var body: some View {
         if column.isAttribute {
@@ -67,7 +69,7 @@ struct StatCell: View {
         case "pricePerCA":
             money(row.value >= 0 && row.ca > 0 ? Int(row.pricePerCA) : nil)
         case "contract":
-            Text(row.expires.isEmpty ? "—" : String(row.expires.prefix(7)))
+            Text(row.expires.isEmpty ? "—" : DateText.monthYear(row.expires))
                 .monospacedDigit().foregroundStyle(.secondary)
         case "growth":
             Text(row.growth == PlayerRow.noGrowth ? "—" : (row.growth > 0 ? "+\(row.growth)" : "\(row.growth)"))
@@ -99,7 +101,7 @@ struct StatCell: View {
     }
 
     private func score(_ v: Double) -> some View {
-        Text(String(format: "%.1f", v)).monospacedDigit().foregroundStyle(AttrColor.color(Int(v.rounded())))
+        Text(String(format: "%.1f", v)).monospacedDigit().foregroundStyle(RelColor.color(v, metaScale))
     }
 }
 

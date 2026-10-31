@@ -15,7 +15,7 @@ struct FormationsPane: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         summary(fit)
-                        TacticsPitch(fit: fit).frame(maxWidth: 560)
+                        TacticsPitch(fit: fit, scale: store.squadScale).frame(maxWidth: 560).frame(maxWidth: .infinity)
                         picksTable(fit)
                         bench(fit)
                     }
@@ -27,10 +27,10 @@ struct FormationsPane: View {
     }
 
     private var list: some View {
-        let best = store.tacticsFits.first?.rating ?? 0
+        let best = store.tacticsFits.first?.formation.name
         return List(selection: Binding(get: { store.tacticsFit?.formation.name },
                                        set: { store.tacticsChoice = $0 })) {
-            SwiftUI.Section("Best shapes for your squad") {
+            SwiftUI.Section {
                 ForEach(store.tacticsFits) { f in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -39,15 +39,22 @@ struct FormationsPane: View {
                         }
                         Spacer()
                         Text(String(format: "%.1f", f.level)).bold().monospacedDigit()
-                            .foregroundStyle(AttrColor.color(Int(f.level.rounded())))
+                            .foregroundStyle(store.scoreColor(f.level))
                         Text("\(Int(TeamCompare.rating(f.level).rounded()))").monospacedDigit()
                             .foregroundStyle(.secondary).frame(minWidth: 24, alignment: .trailing)
                             .help("Rating (0–100)")
-                        if f.rating >= best - 0.05 {
-                            Image(systemName: "crown.fill").foregroundStyle(Theme.gold).help("Best fit")
-                        }
+                        Image(systemName: "crown.fill").foregroundStyle(f.formation.name == best ? Theme.gold : .clear)
+                            .help(f.formation.name == best ? "Best fit: highest level, fewest players out of position, then depth" : "")
                     }
                     .tag(f.formation.name)
+                }
+            } header: {
+                HStack {
+                    Text("Best shapes for your squad")
+                    Spacer()
+                    Text("Level").help("XI level (1–20): average position score of the best eleven")
+                    Text("Rating").frame(minWidth: 24, alignment: .trailing).help("XI level on 0–100")
+                    Image(systemName: "crown.fill").foregroundStyle(.clear)
                 }
             }
         }
@@ -60,13 +67,15 @@ struct FormationsPane: View {
     }
 
     private func summary(_ fit: TacticsAdvisor.FormationFit) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Stat(title: "XI level", value: String(format: "%.1f", fit.level), color: AttrColor.color(Int(fit.level.rounded())))
-            Stat(title: "Rating", value: "\(Int(TeamCompare.rating(fit.level).rounded()))", color: AttrColor.color(Int(fit.level.rounded())))
-                .help(TeamCompare.metric("rating")?.explanation ?? "")
-            Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
-            Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Stat(title: "XI level", value: String(format: "%.1f", fit.level), color: AttrColor.color(Int(fit.level.rounded())))
+                Stat(title: "Rating", value: "\(Int(TeamCompare.rating(fit.level).rounded()))", color: AttrColor.color(Int(fit.level.rounded())))
+                    .help(TeamCompare.metric("rating")?.explanation ?? "")
+                Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
+                Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Button {
                     store.useFormation(fit.formation)
                     onUse()
@@ -77,7 +86,6 @@ struct FormationsPane: View {
                 Text("Roles are scored like FM27's role stars: key attributes, then preferable ones, a little for the rest. A position blends 60% IP and 40% OOP.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: 260, alignment: .leading)
         }
     }
 
@@ -101,7 +109,7 @@ struct FormationsPane: View {
                     roleCell(p.slot.role, p.ipScore)
                     roleCell(p.slot.oop, p.oopScore)
                     Text(String(format: "%.1f", p.score)).bold().monospacedDigit()
-                        .foregroundStyle(AttrColor.color(Int(p.score.rounded())))
+                        .foregroundStyle(store.scoreColor(p.score))
                     Text(p.alternatives.map { "\(Roles.role($0.code)?.name ?? $0.code) \(String(format: "%.1f", $0.score))" }
                         .joined(separator: ", "))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -115,7 +123,7 @@ struct FormationsPane: View {
     private func roleCell(_ code: String, _ score: Double) -> some View {
         HStack(spacing: 4) {
             Text(Roles.role(code)?.name ?? "—").lineLimit(1)
-            Text(String(format: "%.1f", score)).monospacedDigit().foregroundStyle(AttrColor.color(Int(score.rounded())))
+            Text(String(format: "%.1f", score)).monospacedDigit().foregroundStyle(store.scoreColor(score))
         }
     }
 
@@ -128,7 +136,7 @@ struct FormationsPane: View {
                         Text(r.name).lineLimit(1)
                         Text(r.positions.split(separator: ",").first.map(String.init) ?? "").foregroundStyle(.secondary)
                         Text(String(format: "%.1f", r.bestRoleScore)).monospacedDigit()
-                            .foregroundStyle(AttrColor.color(Int(r.bestRoleScore.rounded())))
+                            .foregroundStyle(store.scoreColor(r.bestRoleScore))
                     }
                     .font(.caption)
                     .padding(.horizontal, 8).padding(.vertical, 4)
@@ -143,6 +151,7 @@ struct FormationsPane: View {
 /// The suggested XI on a pitch.
 private struct TacticsPitch: View {
     let fit: TacticsAdvisor.FormationFit
+    var scale: ScoreScale? = nil
 
     var body: some View {
         let points = PitchLayout.points(for: fit.picks.map(\.slot))
@@ -169,7 +178,7 @@ private struct TacticsPitch: View {
                 .font(.system(size: 8.5)).foregroundStyle(.white.opacity(0.7)).lineLimit(1).minimumScaleFactor(0.7)
             Text(p.player == nil ? "empty" : String(format: "%.1f", p.score))
                 .font(.system(size: 10, weight: .bold)).monospacedDigit()
-                .foregroundStyle(p.player == nil ? Color.red : AttrColor.color(Int(p.score.rounded())))
+                .foregroundStyle(p.player == nil ? Color.red : RelColor.color(p.score, scale))
         }
         .padding(.horizontal, 5).padding(.vertical, 3)
         .frame(width: 104)
@@ -200,8 +209,10 @@ struct SetPiecesPane: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 330), spacing: 12, alignment: .top)], spacing: 12) {
                         card("Captain", "person.badge.shield.checkmark.fill", sp.captains, ["Captain", "Vice-captain", "Third"])
                         card("Penalties", "target", sp.penalties, ["1st", "2nd", "3rd", "4th", "5th"])
-                        card("Corners — left side", "arrow.turn.up.right", sp.leftCorners, ["Taker", "Alt", "Alt"])
-                        card("Corners — right side", "arrow.turn.up.left", sp.rightCorners, ["Taker", "Alt", "Alt"])
+                        card("Corners — left side", "arrow.turn.up.right", sp.leftCorners, ["Taker", "Alt", "Alt"],
+                             subtitle: "Inswingers from the left need a right-footed taker")
+                        card("Corners — right side", "arrow.turn.up.left", sp.rightCorners, ["Taker", "Alt", "Alt"],
+                             subtitle: "Inswingers from the right need a left-footed taker")
                         card("Free kicks — shots", "scope", sp.directFreeKicks, ["Taker", "Alt", "Alt"])
                         card("Free kicks — crosses", "arrow.up.forward", sp.crossedFreeKicks, ["Taker", "Alt", "Alt"])
                         card("Attack the ball", "arrow.up.circle.fill", sp.aerialTargets, ["Target", "Target", "Target", "Alt"])
@@ -216,9 +227,11 @@ struct SetPiecesPane: View {
         }
     }
 
-    private func card(_ title: String, _ icon: String, _ takers: [TacticsAdvisor.Taker], _ labels: [String]) -> some View {
+    private func card(_ title: String, _ icon: String, _ takers: [TacticsAdvisor.Taker], _ labels: [String],
+                      subtitle: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon).font(.headline)
+            if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
             ForEach(Array(takers.enumerated()), id: \.element.id) { i, t in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(i < labels.count ? labels[i] : "").font(.caption).foregroundStyle(.secondary)
@@ -283,6 +296,12 @@ struct InstructionsPane: View {
                         } label: { Label("Use all suggestions", systemImage: "wand.and.stars") }
                         .help("Copies the suggested mentality, style and instructions into your tactic")
                     }
+                    HStack(spacing: 14) {
+                        HStack(spacing: 4) { Circle().fill(Color.orange).frame(width: 6, height: 6); Text("yours differs from the suggestion") }
+                        HStack(spacing: 4) { Capsule().fill(Theme.gold.opacity(0.4)).frame(width: 18, height: 9); Text("strong reason") }
+                        HStack(spacing: 4) { Capsule().fill(Color.accentColor.opacity(0.4)).frame(width: 18, height: 9); Text("mild reason") }
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                     HStack(alignment: .top, spacing: 12) {
                         mentalityCard(ins)
                         styles(ins.styles)
@@ -353,13 +372,19 @@ struct InstructionsPane: View {
             ForEach(specs) { spec in
                 let sug = ins.items.first { $0.name == spec.name }
                 let mine = store.workingFormation.instructions?[spec.name]
+                let differs = sug.map { (mine ?? "") != $0.setting } ?? false
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(spec.name).font(.callout).frame(width: 200, alignment: .leading)
+                    HStack(spacing: 5) {
+                        Circle().fill(differs ? Color.orange : .clear).frame(width: 6, height: 6)
+                        Text(spec.name).font(.callout)
+                    }
+                    .frame(width: 200, alignment: .leading)
                     Group {
                         if let sug {
                             Text(sug.setting).font(.callout.bold())
                                 .padding(.horizontal, 8).padding(.vertical, 2)
                                 .background((sug.strength > 0.6 ? Theme.gold : Color.accentColor).opacity(0.22), in: Capsule())
+                                .help(sug.strength > 0.6 ? "Strong reason in your squad" : "Mild reason — worth trying")
                         } else {
                             Text("Default").font(.callout).foregroundStyle(.secondary)
                         }
@@ -372,15 +397,12 @@ struct InstructionsPane: View {
                     }
                     .labelsHidden()
                     .frame(width: 200, alignment: .leading)
-                    .overlay(alignment: .trailing) {
-                        if let sug, let mine, mine != sug.setting {
-                            Image(systemName: "exclamationmark.circle").foregroundStyle(.orange).offset(x: 16)
-                                .help("Differs from the suggestion")
-                        }
-                    }
                     Text(sug?.reason ?? "").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
+                .padding(.vertical, 1)
+                .background(differs ? Color.orange.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+                .help(differs ? "Yours (\(mine ?? "Default")) differs from the suggestion (\(sug?.setting ?? ""))" : "")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

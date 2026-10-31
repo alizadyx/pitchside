@@ -141,36 +141,41 @@ struct SquadView: View {
                             .font(.caption).foregroundStyle(.orange)
                     }
                 }
-                Picker("Team", selection: $store.squadWomen) {
-                    Text("Men").tag(false)
-                    Text("Women").tag(true)
+                if store.genderFilter == 0 {
+                    Picker("Team", selection: $store.squadWomen) {
+                        Text("Men").tag(false)
+                        Text("Women").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                    .help("A club's men's and women's sides share its name; pick which one to build. Follows the Men/Women switch at the top unless that's on Both.")
                 }
-                .pickerStyle(.segmented)
-                .fixedSize()
-                .help("A club's men's and women's sides share its name; pick which one to build")
                 tacticControls
-                HStack(spacing: 6) {
-                    Text("Budget \(store.currency.symbol)")
-                    NumberField(value: $store.transferBudget, width: 110)
-                    Text("Wage/wk")
-                    NumberField(value: $store.wageBudget, width: 84)
+                if mode == 0 {
+                    // Signing filters only matter where signings are listed.
+                    HStack(spacing: 6) {
+                        Text("Budget \(store.currency.symbol)")
+                        NumberField(value: $store.transferBudget, width: 110, zeroIsAny: true)
+                        Text("Wage/wk")
+                        NumberField(value: $store.wageBudget, width: 84, zeroIsAny: true)
+                    }
+                    HStack(spacing: 6) {
+                        Text("Age")
+                        NumberField(value: $store.signMinAge, width: 40)
+                        Text("–")
+                        NumberField(value: $store.signMaxAge, width: 40)
+                    }
+                    Picker("Willing to join", selection: $store.minInterest) {
+                        Text("Anyone").tag(0)
+                        Text("Doubtful or better").tag(1)
+                        Text("Persuadable or better").tag(2)
+                        Text("Interested only").tag(3)
+                    }
+                    .fixedSize()
+                    .help("Estimated from club and league size, the player's fame, ambition, loyalty, age, contract and transfer status. FM itself doesn't store this, so treat it as a guide.")
+                    Toggle("Depth signing", isOn: $store.signForDepth)
+                        .help("Compare with the backup instead of the starter")
                 }
-                HStack(spacing: 6) {
-                    Text("Age")
-                    NumberField(value: $store.signMinAge, width: 40)
-                    Text("–")
-                    NumberField(value: $store.signMaxAge, width: 40)
-                }
-                Picker("Willing to join", selection: $store.minInterest) {
-                    Text("Anyone").tag(0)
-                    Text("Doubtful or better").tag(1)
-                    Text("Persuadable or better").tag(2)
-                    Text("Interested only").tag(3)
-                }
-                .fixedSize()
-                .help("Estimated from club and league size, the player's fame, ambition, loyalty, age, contract and transfer status. FM itself doesn't store this, so treat it as a guide.")
-                Toggle("Depth signing", isOn: $store.signForDepth)
-                    .help("Compare with the backup instead of the starter")
             }
             .font(.callout)
             if let r = store.squadReport {
@@ -181,6 +186,9 @@ struct SquadView: View {
                     Text("starter level \(String(format: "%.1f", r.level)) · rating \(Int(TeamCompare.rating(r.level).rounded()))")
                         .help(TeamCompare.metric("rating")?.explanation ?? "")
                     Text("reputation \(r.reputation)")
+                    Text("Scores: green above your XI level, white about level, orange/red below")
+                        .font(.caption).foregroundStyle(.tertiary)
+                        .help("Scores are coloured against your starters' average (\(String(format: "%.1f", r.level))), so you can see who's above or below your level at a glance.")
                 }
                 .font(.callout).foregroundStyle(.secondary)
             }
@@ -210,7 +218,7 @@ struct SquadView: View {
                     }
                 }
             }
-            .fixedSize()
+            .frame(width: 210)
             if store.formationEdited {
                 Text("edited")
                     .font(.caption.weight(.semibold))
@@ -248,6 +256,13 @@ struct SquadView: View {
         }
     }
 
+    private func legendDot(_ c: Color, _ text: String) -> some View {
+        HStack(spacing: 3) {
+            Circle().fill(c).frame(width: 8, height: 8)
+            Text(text)
+        }
+    }
+
     private var pitchHeader: some View {
         let n = store.workingFormation.slots.count
         return HStack(spacing: 8) {
@@ -255,6 +270,13 @@ struct SquadView: View {
                 .font(.callout)
                 .foregroundStyle(n == 11 ? Color.secondary : Color.orange)
                 .help(n == 11 ? "" : "A starting XI has 11 positions")
+            HStack(spacing: 8) {
+                legendDot(.green, "fine")
+                legendDot(.orange, "weak spot")
+                legendDot(.red, "big gap")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .help("Circle colour: how far the starter is below your XI level (more than 1 point: weak spot; more than 2.5 or nobody: big gap)")
             Spacer()
             Text("Click a position to edit it, or right-click")
                 .font(.caption).foregroundStyle(.secondary)
@@ -292,7 +314,7 @@ struct SquadView: View {
             HStack(spacing: 8) {
                 if let slot, let role {
                     Text("Signings for \(slot.slot.label)").font(.headline)
-                    Text(role.name + (slot.slot.oop.isEmpty ? "" : " · " + (Roles.role(slot.slot.oop)?.name ?? "") + " (OOP)"))
+                    Text(RoleText.pair(slot.slot))
                         .foregroundStyle(.secondary)
                     Text(String(format: "must beat %.1f", store.signForDepth ? slot.backupScore : slot.starterScore))
                         .font(.callout).padding(.horizontal, 7).padding(.vertical, 2)
@@ -324,7 +346,7 @@ struct SquadView: View {
                 }
                 .width(min: 90, ideal: 140, max: 240).customizationID("club")
                 TableColumn("Role") { s in
-                    Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(AttrColor.color(Int(s.score.rounded())))
+                    Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(store.scoreColor(s.score))
                 }
                 .width(min: 36, ideal: 42, max: 50).customizationID("role")
                 TableColumn("Gain") { s in
@@ -337,9 +359,11 @@ struct SquadView: View {
                 }
                 .width(min: 70, ideal: 92, max: 110).customizationID("interest")
                 TableColumn("Value · Wage") { s in
-                    Text(Money.format(s.row.person.val, symbol: store.currency.symbol, perGbp: store.rate) + " · "
-                         + Money.format(s.row.person.wage, symbol: store.currency.symbol, perGbp: store.rate))
+                    Text((s.row.club.isEmpty ? "Free transfer"
+                          : Money.format(s.row.person.val, symbol: store.currency.symbol, perGbp: store.rate) + " · "
+                            + Money.format(s.row.person.wage, symbol: store.currency.symbol, perGbp: store.rate)))
                         .monospacedDigit().lineLimit(1)
+                        .foregroundStyle(s.row.club.isEmpty ? Color.green : Color.primary)
                 }
                 .width(min: 90, ideal: 120, max: 170).customizationID("value-wage")
                 TableColumnForEach(store.columns(for: "signings")) { c in
@@ -450,7 +474,6 @@ struct MySquadView: View {
         @Bindable var store = store
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Text("\(store.squadRows.count) players").font(.callout.weight(.medium)).foregroundStyle(.secondary)
                 Text("XI = starting position in your formation").font(.caption).foregroundStyle(.tertiary)
                 if !store.loanedOut.isEmpty {
                     Label("\(store.loanedOut.count) out on loan", systemImage: "arrow.up.forward.circle")
@@ -499,18 +522,20 @@ struct MySquadView: View {
                         Text(Roles.role(r.bestRole)?.short ?? r.bestRole).foregroundStyle(.secondary).lineLimit(1)
                             .help(Roles.role(r.bestRole)?.name ?? r.bestRole)
                         Text(String(format: "%.1f", r.bestRoleScore)).monospacedDigit()
-                            .foregroundStyle(AttrColor.color(Int(r.bestRoleScore.rounded())))
+                            .foregroundStyle(store.scoreColor(r.bestRoleScore))
                     }
                 }
                 .width(min: 90, ideal: 170, max: 240).customizationID("best-role")
                 TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
                 TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                 TableColumn("Contract", value: \.expires) { r in
-                    Text(r.expires.isEmpty ? "—" : String(r.expires.prefix(7))).monospacedDigit().foregroundStyle(.secondary)
+                    Text(r.expires.isEmpty ? "—" : DateText.monthYear(r.expires)).monospacedDigit().foregroundStyle(.secondary)
                 }
                 .width(min: 54, ideal: 64, max: 80).customizationID("contract")
                 TableColumnForEach(store.columns(for: "squad")) { c in
-                    TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r, store: store) }
+                    TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in
+                        StatCell(column: c, row: r, store: store, metaScale: store.squadMetaScale)
+                    }
                         .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
                 }
             }
@@ -537,7 +562,7 @@ struct FormationPitch: View {
                 PitchBackground()
                 ForEach(report.slots) { a in
                     if let pt = points[a.slot.label] {
-                        SlotMarker(a: a, selected: store.selectedSlot == a.slot.label)
+                        SlotMarker(a: a, selected: store.selectedSlot == a.slot.label, scale: store.squadScale)
                             .position(x: pt.x * geo.size.width, y: pt.y * geo.size.height)
                             .onTapGesture { store.selectedSlot = a.slot.label }
                             .contextMenu { SlotMenu(label: a.slot.label, store: store) }
@@ -552,6 +577,7 @@ struct FormationPitch: View {
 struct SlotMarker: View {
     let a: SlotAnalysis
     let selected: Bool
+    var scale: ScoreScale? = nil
 
     var body: some View {
         let colour: Color = a.weakness > 2.5 ? .red : a.weakness > 1 ? .orange : .green
@@ -570,7 +596,7 @@ struct SlotMarker: View {
                     .font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                 Text(a.starter == nil ? "empty" : String(format: "%.1f", a.starterScore))
                     .font(.system(size: 10, weight: .bold)).monospacedDigit()
-                    .foregroundStyle(a.starter == nil ? Color.red : AttrColor.color(Int(a.starterScore.rounded())))
+                    .foregroundStyle(a.starter == nil ? Color.red : RelColor.color(a.starterScore, scale))
             }
         }
         .padding(.horizontal, 5).padding(.vertical, 3)
@@ -631,7 +657,10 @@ struct SlotCard: View {
             HStack {
                 Text(a.slot.label).font(.headline)
                 Text(Roles.role(a.slot.role)?.name ?? a.slot.role).foregroundStyle(.secondary)
-                if let o = Roles.role(a.slot.oop) { Text("· \(o.name) (OOP)").foregroundStyle(.secondary) }
+                if let o = Roles.role(a.slot.oop) {
+                    Text(o.name == Roles.role(a.slot.role)?.name ? "· in and out of possession" : "· \(o.name) (OOP)")
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
             }
             if let i = store.slotIndex(a.slot.label) { editor(i) }
@@ -660,7 +689,7 @@ struct SlotCard: View {
                             }
                             Spacer()
                             Text(String(format: "%.1f", o.score)).monospacedDigit()
-                                .foregroundStyle(AttrColor.color(Int(o.score.rounded())))
+                                .foregroundStyle(store.scoreColor(o.score))
                         }
                         .font(.callout)
                     }
@@ -753,7 +782,7 @@ struct SlotCard: View {
             if let r { Text("\(r.age)").foregroundStyle(.secondary) }
             Spacer()
             if r != nil {
-                Text(String(format: "%.1f", score)).bold().monospacedDigit().foregroundStyle(AttrColor.color(Int(score.rounded())))
+                Text(String(format: "%.1f", score)).bold().monospacedDigit().foregroundStyle(store.scoreColor(score))
             }
         }
         .font(.callout)
@@ -777,8 +806,10 @@ struct RadarView: View {
             .sorted { $0.pa != $1.pa ? $0.pa > $1.pa : $0.ca > $1.ca }
         let rows = Array((mode == 0 ? risers : regens).prefix(500))
         VStack(spacing: 0) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
-                Stat(title: "Compared with", value: store.referenceLabel.isEmpty ? "—" : String(store.referenceLabel.prefix(28)))
+            // Equal-width tiles across the whole width (an adaptive grid left half of it empty).
+            HStack(spacing: 10) {
+                Stat(title: "Compared with", value: store.referenceLabel.isEmpty ? "—" : store.referenceLabel)
+                    .help(store.referenceLabel)
                 Stat(title: "Players who improved", value: risers.count.formatted(), color: .green)
                 Stat(title: "Biggest rise", value: risers.first.map { "+\($0.growth) \($0.name)" } ?? "—")
                 Stat(title: "New since last scan", value: regens.count.formatted(), color: .purple)
@@ -1033,15 +1064,15 @@ struct SquadTimelineView: View {
 
     var body: some View {
         let plans = store.squadTimeline
-        ScrollView([.vertical, .horizontal]) {
+        ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Who fills each position as contracts run out and players age. Orange: 31 or older that season. Red: nobody left who plays there.")
+                Text("Who fills each position as contracts run out and players age. Orange: 31 or older that season. Grey: only covered if you renew his contract. Red: nobody left who plays there.")
                     .font(.callout).foregroundStyle(.secondary)
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
                     GridRow {
                         Text("Position").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         ForEach(plans) { p in
-                            Text(p.label).font(.headline).frame(width: 200, alignment: .leading)
+                            Text(p.label).font(.headline).frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     Divider().gridCellUnsizedAxes(.horizontal)
@@ -1053,7 +1084,8 @@ struct SquadTimelineView: View {
                             }
                             .frame(width: 70, alignment: .leading)
                             ForEach(plans) { p in
-                                cell(p.report.slots.first { $0.slot.label == slot.label })
+                                cell(p.report.slots.first { $0.slot.label == slot.label },
+                                     renewed: p.ifRenewed?.slots.first { $0.slot.label == slot.label })
                             }
                         }
                     }
@@ -1072,7 +1104,7 @@ struct SquadTimelineView: View {
                                 if p.leaving.count > 12 { Text("+\(p.leaving.count - 12) more").foregroundStyle(.secondary) }
                             }
                             .font(.callout)
-                            .frame(width: 200, alignment: .leading)
+                            .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
@@ -1082,7 +1114,7 @@ struct SquadTimelineView: View {
         }
     }
 
-    @ViewBuilder private func cell(_ a: SlotAnalysis?) -> some View {
+    @ViewBuilder private func cell(_ a: SlotAnalysis?, renewed: SlotAnalysis?) -> some View {
         if let a, let s = a.starter {
             let old = s.age >= 31
             Button { picked = s.id } label: {
@@ -1093,22 +1125,37 @@ struct SquadTimelineView: View {
                         HStack(spacing: 6) {
                             Text("\(s.age)").foregroundStyle(old ? Color.orange : Color.secondary)
                             Text(String(format: "%.1f", a.starterScore))
-                                .foregroundStyle(AttrColor.color(Int(a.starterScore.rounded())))
-                            if let e = s.person.exp, !e.isEmpty { Text("to \(e.prefix(4))").foregroundStyle(.tertiary) }
+                                .foregroundStyle(store.scoreColor(a.starterScore))
+                            if let e = s.person.exp, !e.isEmpty { Text("to \(DateText.monthYear(e))").foregroundStyle(.tertiary) }
                         }
                         .font(.caption).monospacedDigit()
                     }
                 }
-                .frame(width: 200, alignment: .leading)
+                .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+        } else if let r = renewed, let s = r.starter {
+            Button { picked = s.id } label: {
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 2).fill(Color.gray).frame(width: 4, height: 26)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(s.name).lineLimit(1).foregroundStyle(.secondary)
+                        Text("contract ends \(DateText.monthYear(s.person.exp ?? "")) — renew?")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                }
+                .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Nobody under contract plays here this season. Renewing \(s.name) would keep it covered (score \(String(format: "%.1f", r.starterScore))).")
         } else {
             HStack(spacing: 6) {
                 RoundedRectangle(cornerRadius: 2).fill(Color.red).frame(width: 4, height: 26)
                 Text("Nobody").foregroundStyle(.red)
             }
-            .frame(width: 200, alignment: .leading)
+            .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
         }
     }
 }

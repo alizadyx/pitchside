@@ -384,7 +384,7 @@ public enum SquadBuilder {
             else {
                 if ss < level - 1 { issues.append(String(format: "Starter %.1f below squad level %.1f", ss, level)) }
                 if let a = s?.age, a >= 31 { issues.append("Starter is \(a)") }
-                if let e = s?.person.exp, !e.isEmpty, e <= soon { issues.append("Starter's contract ends \(e.prefix(7))") }
+                if let e = s?.person.exp, !e.isEmpty, e <= soon { issues.append("Starter's contract ends \(DateText.monthYear(e))") }
             }
             if b == nil { issues.append("No backup") }
             else if bs < level - 2.5 { issues.append(String(format: "Weak backup (%.1f)", bs)) }

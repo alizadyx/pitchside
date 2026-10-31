@@ -274,7 +274,7 @@ public enum TacticsAdvisor {
             top(outfield, 3, score: { r in
                 let f = fromLeft ? R.attr(r, "RightFoot") : R.attr(r, "LeftFoot")
                 return R.mix(r, cornerW) + (f >= 15 ? 0.6 : f >= 11 ? 0 : -1.5)
-            }, note: { r in "Corners \(i(r, "Corners")), Crossing \(i(r, "Crossing")), \(foot(r)) — \(fromLeft ? "inswinging from the left needs the right foot" : "inswinging from the right needs the left foot")" })
+            }, note: { r in "Corners \(i(r, "Corners")), Crossing \(i(r, "Crossing")), \(foot(r))" })
         }
         let direct = top(outfield, 3, score: { R.mix($0, [("FreeKicks", 6), ("LongShots", 2), ("Technique", 2)]) },
                          note: { "Free kicks \(i($0, "FreeKicks")), Long shots \(i($0, "LongShots")), Technique \(i($0, "Technique"))" })

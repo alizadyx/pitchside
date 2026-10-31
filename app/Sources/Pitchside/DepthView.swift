@@ -36,7 +36,7 @@ struct DepthView: View {
                         VStack(spacing: 14) {
                             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                                 DepthRowLayout(xs: row.map(\.x)) {
-                                    ForEach(row) { d in DepthCard(d: d, starts: starts, picked: $picked) }
+                                    ForEach(row) { d in DepthCard(d: d, starts: starts, scale: store.squadScale, picked: $picked) }
                                 }
                             }
                         }
@@ -56,6 +56,7 @@ struct DepthView: View {
 private struct DepthCard: View {
     let d: SquadBuilder.DepthSlot
     let starts: [UInt32: String]
+    let scale: ScoreScale?
     @Binding var picked: UInt32?
 
     var body: some View {
@@ -85,7 +86,7 @@ private struct DepthCard: View {
                         }
                         Spacer(minLength: 4)
                         Text(String(format: "%.1f", o.score)).monospacedDigit().fontWeight(.semibold)
-                            .foregroundStyle(AttrColor.color(Int(o.score.rounded())))
+                            .foregroundStyle(RelColor.color(o.score, scale))
                     }
                     .font(.callout)
                     .contentShape(Rectangle())
@@ -99,10 +100,9 @@ private struct DepthCard: View {
         .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
     }
 
+    /// Role codes, as on the My tactic pitch ("IF / W"); full names on hover.
     private var roleText: String {
-        let ip = Roles.role(d.slot.role)?.short ?? d.slot.role
-        guard let oop = Roles.role(d.slot.oop) else { return ip }
-        return "\(ip) / \(oop.short)"
+        d.slot.oop.isEmpty ? d.slot.role : "\(d.slot.role) / \(d.slot.oop.dropFirst())"
     }
 
     private var roleHelp: String {

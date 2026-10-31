@@ -118,6 +118,14 @@ final class InsightTests: XCTestCase {
         XCTAssertFalse(names.contains("Loanee Out"), "your own loanee is not a signing")
     }
 
+    func testDateTextAndScoreScale() {
+        XCTAssertEqual(DateText.monthYear("2027-05-31"), "May 2027")
+        XCTAssertEqual(DateText.monthYear("2030-06"), "Jun 2030")
+        XCTAssertEqual(DateText.monthYear("soon"), "soon")
+        let s = ScoreScale(reference: 9.5)
+        XCTAssertEqual([10.6, 9.9, 9.5, 8.9, 7.9].map(s.tier), [2, 1, 0, -1, -2])
+    }
+
     func testLeagueMap() {
         var t = Factory()
         var people: [Person] = []

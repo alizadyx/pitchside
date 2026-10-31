@@ -24,11 +24,14 @@ struct TeamsCompareView: View {
                 .help(store.basis.help)
                 if store.compareBusy { ProgressView().controlSize(.small) }
                 Spacer()
-                Picker("Side", selection: Binding(get: { store.squadWomen }, set: { store.squadWomen = $0 })) {
-                    Text("Men").tag(false)
-                    Text("Women").tag(true)
+                if store.genderFilter == 0 {
+                    Picker("Side", selection: Binding(get: { store.squadWomen }, set: { store.squadWomen = $0 })) {
+                        Text("Men").tag(false)
+                        Text("Women").tag(true)
+                    }
+                    .pickerStyle(.segmented).fixedSize()
+                    .help("Follows the Men/Women switch at the top unless that's on Both")
                 }
-                .pickerStyle(.segmented).fixedSize()
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             Divider()
@@ -235,11 +238,13 @@ private struct LeaguePane: View {
     private func table(_ profiles: [TeamCompare.TeamProfile], avg: [String: Double]) -> some View {
         let metrics = Self.columns.compactMap { TeamCompare.metric($0) }
         return ScrollView([.vertical, .horizontal]) {
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+            // No spacing between cells: each cell pads itself and fills its column, so a row's
+            // highlight runs across the whole row as one band.
+            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
                 GridRow {
-                    Text("#").foregroundStyle(.secondary)
-                    Text("Club").font(.caption.weight(.semibold))
-                    Text("Shape").font(.caption.weight(.semibold))
+                    Text("#").foregroundStyle(.secondary).tableCell()
+                    Text("Club").font(.caption.weight(.semibold)).tableCell()
+                    Text("Shape").font(.caption.weight(.semibold)).tableCell()
                         .help("The formation that gets the most out of this squad")
                     ForEach(metrics) { m in
                         Button { sortID = m.id } label: {
@@ -247,37 +252,40 @@ private struct LeaguePane: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .tableCell()
                         .help(m.explanation + "\n\nClick to sort.")
                     }
                 }
                 Divider().gridCellUnsizedAxes(.horizontal)
                 ForEach(Array(sorted(profiles).enumerated()), id: \.element.club) { i, p in
+                    let mine = p.club == store.myClub
                     GridRow {
-                        Text("\(i + 1)").foregroundStyle(.secondary).monospacedDigit()
+                        Text("\(i + 1)").foregroundStyle(.secondary).monospacedDigit().tableCell(highlight: mine)
                         Button { selected = p.club } label: {
-                            Text(p.club).fontWeight(p.club == store.myClub ? .bold : .regular).lineLimit(1)
+                            Text(p.club).fontWeight(mine ? .bold : .regular).lineLimit(1)
                                 .foregroundStyle(p.club == selected ? Theme.gold : .primary)
                         }
                         .buttonStyle(.plain)
                         .frame(minWidth: 150, alignment: .leading)
+                        .tableCell(highlight: mine)
                         .help(p.club)
-                        Text(p.formation).foregroundStyle(.secondary).font(.caption).help(p.formation)
+                        Text(p.formation).foregroundStyle(.secondary).font(.caption).tableCell(highlight: mine).help(p.formation)
                         ForEach(metrics) { m in
                             Text(cellText(m, p, avg: avg)).monospacedDigit()
                                 .foregroundStyle(MetricText.rankColor(TeamCompare.standing(p[m.id], metric: m, in: profiles)))
+                                .tableCell(highlight: mine)
                                 .help(cellHelp(m, p, profiles: profiles, avg: avg))
                         }
                     }
-                    .padding(.vertical, 1)
-                    .background(p.club == store.myClub ? Theme.accentSoft : .clear)
                 }
                 Divider().gridCellUnsizedAxes(.horizontal)
                 GridRow {
-                    Text("")
-                    Text("League average").italic()
-                    Text("")
+                    Text("").tableCell()
+                    Text("League average").italic().tableCell()
+                    Text("").tableCell()
                     ForEach(metrics) { m in
                         Text(MetricText.format(m, avg[m.id] ?? 0, store: store)).monospacedDigit().foregroundStyle(.secondary)
+                            .tableCell()
                             .help("League average \(m.title): \(MetricText.format(m, avg[m.id] ?? 0, store: store))")
                     }
                 }
@@ -487,4 +495,20 @@ private struct GroupPane: View {
         TeamCompare.TeamProfile(club: "the group", division: "", formation: "", values: avg, fit: me.fit,
                                 players: [], tactical: me.tactical)
     }
+}
+
+/// A cell of a hand-built table: pads itself and fills its column, so row highlights join up.
+struct TableCellStyle: ViewModifier {
+    var highlight = false
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(highlight ? Theme.accentSoft : Color.clear)
+    }
+}
+
+extension View {
+    func tableCell(highlight: Bool = false) -> some View { modifier(TableCellStyle(highlight: highlight)) }
 }

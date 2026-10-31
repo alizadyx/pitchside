@@ -170,6 +170,9 @@ extension SquadBuilder {
         public let season: Int              // 2026 = the 2026/27 season
         public let report: SquadReport
         public let leaving: [PlayerRow]     // contracts ending at the end of this season
+        /// The same season if every expiring contract were renewed (nil for the current season):
+        /// shows who you'd keep by renewing, rather than an empty position.
+        public var ifRenewed: SquadReport? = nil
         public var label: String { "\(season)/\(String(season + 1).suffix(2))" }
     }
 
@@ -189,7 +192,12 @@ extension SquadBuilder {
                 guard let e = r.person.exp, !e.isEmpty else { return false }
                 return e < "\(s + 1)-07-01"
             }.sorted { $0.ca > $1.ca }
-            return SeasonPlan(season: s, report: report, leaving: leaving)
+            var plan = SeasonPlan(season: s, report: report, leaving: leaving)
+            if k > 0 {
+                let everyone = squad.map { r -> PlayerRow in var r = r; r.age += k; return r }
+                plan.ifRenewed = analyse(club: club, formation: formation, rows: everyone, meta: meta, season: s)
+            }
+            return plan
         }
     }
 }

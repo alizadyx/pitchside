@@ -6,7 +6,8 @@ import Foundation
 /// acceleration matter far more than anything else, then jumping reach, dribbling,
 /// anticipation and work rate; crossing, marking, agility, decisions and technique add
 /// very little. Approximate by nature, but it ranks players much closer to how they
-/// actually perform than CA does. Result is on the 1–20 scale.
+/// actually perform than CA does. Result is on the 1–20 scale (keepers calibrated to it), plus a
+/// 0–100 percentile among all scanned players.
 public enum Meta {
     static let outfield: [String: Double] = [
         "Pace": 5, "Acceleration": 5,
@@ -47,9 +48,38 @@ public enum Meta {
         }
         guard w > 0 else { return 0 }
         var s = sum / w
-        // Testing shows players with very low Pressure perform much worse.
-        if let pi = r.pressure, let p = personality, pi < p.count, p[pi] > 0, p[pi] < 6 { s -= 1.0 }
+        // Testing shows players with very low Pressure perform much worse: a quarter point per point below 8.
+        if let pi = r.pressure, let p = personality, pi < p.count, p[pi] > 0, p[pi] < 8 { s -= 0.25 * Double(8 - Int(p[pi])) }
         return (max(0, s) * 10).rounded() / 10
+    }
+
+    /// Puts goalkeepers on the outfield scale (their weights give higher numbers: a keeper's 14 was
+    /// worth an outfielder's 13) by matching the two distributions in the scan, then ranks everyone
+    /// 0–100. Small scans (under 30 keepers or outfielders) keep the raw keeper numbers.
+    public static func calibrate(_ rows: inout [PlayerRow], keeper: [Bool]) {
+        guard keeper.count == rows.count else { return }
+        let gk = rows.indices.filter { keeper[$0] && rows[$0].meta > 0 }
+        let of = rows.indices.filter { !keeper[$0] && rows[$0].meta > 0 }
+        func stats(_ idx: [Int]) -> (Double, Double) {
+            let v = idx.map { rows[$0].meta }
+            let m = v.reduce(0, +) / Double(v.count)
+            let sd = (v.reduce(0) { $0 + ($1 - m) * ($1 - m) } / Double(v.count)).squareRoot()
+            return (m, sd)
+        }
+        if gk.count >= 30 && of.count >= 30 {
+            let (mg, sg) = stats(gk), (mo, so) = stats(of)
+            if sg > 0 {
+                for i in gk { rows[i].meta = (max(0, mo + (rows[i].meta - mg) * so / sg) * 10).rounded() / 10 }
+            }
+        }
+        let sorted = rows.map(\.meta).sorted()
+        guard sorted.count > 1 else { return }
+        for i in rows.indices {
+            // Share of players strictly below, as 0–100.
+            var lo = 0, hi = sorted.count
+            while lo < hi { let mid = (lo + hi) / 2; if sorted[mid] < rows[i].meta { lo = mid + 1 } else { hi = mid } }
+            rows[i].metaRating = Int((100 * Double(lo) / Double(sorted.count - 1)).rounded())
+        }
     }
 }
 

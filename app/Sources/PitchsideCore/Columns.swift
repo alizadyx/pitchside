@@ -44,6 +44,7 @@ public enum StatColumns {
         General(key: "growth", title: "Growth"),
         General(key: "pricePerCA", title: "£ per CA"),
         General(key: "meta", title: "Meta"),
+        General(key: "metaRating", title: "Meta %"),
         General(key: "bestRole", title: "Best role"),
         General(key: "ca", title: "CA"),
         General(key: "pa", title: "PA"),
@@ -138,6 +139,7 @@ public struct StatReader: Sendable {
             case "growth": return r.growth == PlayerRow.noGrowth ? nil : Double(r.growth)
             case "pricePerCA": return r.value >= 0 && r.ca > 0 ? r.pricePerCA : nil
             case "meta": return r.meta
+            case "metaRating": return Double(r.metaRating)
             case "bestRole": return r.bestRoleScore
             case "ca": return Double(r.ca)
             case "pa": return Double(r.pa)

@@ -6,7 +6,10 @@ public enum Audit {
     @discardableResult
     public static func dump(exportPath path: String, club: String, outPath: String) throws -> Int {
         var file = try JSONDecoder().decode(ExportFile.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
-        file.players = file.players.filter { $0.club == club || $0.own == club }
+        // Whole scan (meta is calibrated across it) unless asked to keep only the club, which is faster.
+        if ProcessInfo.processInfo.environment["AUDIT_CLUB_ONLY"] != nil {
+            file.players = file.players.filter { $0.club == club || $0.own == club }
+        }
         let meta = file.meta
         let fmt = ISO8601DateFormatter(); fmt.formatOptions = [.withFullDate]
         let ref = file.meta.gameDate.flatMap { fmt.date(from: String($0.prefix(10))) } ?? Date()
@@ -20,14 +23,14 @@ public enum Audit {
             throw NSError(domain: "Audit", code: 1, userInfo: [NSLocalizedDescriptionKey: "No players found for \(club)"])
         }
         let squad = report.squad
-        var out: [String: Any] = ["club": club, "gameDate": meta.gameDate ?? "", "attrKeys": meta.playerAttrKeys, "posKeys": meta.positionKeys,
+        var out: [String: Any] = ["club": club, "gameDate": meta.gameDate ?? "", "attrKeys": meta.playerAttrKeys, "persKeys": meta.personalityKeys, "posKeys": meta.positionKeys,
                                   "teams": teams.map { "\($0.label) \($0.count)" }]
         out["roles"] = Roles.all.map { ["code": $0.code, "ip": $0.isIP, "pos": $0.positions, "key": $0.key, "support": $0.support] }
         out["pools"] = ["outfield": Roles.outfieldAttrs, "keeper": Roles.keeperAttrs]
         out["weights"] = [Roles.keyWeight, Roles.preferableWeight, Roles.otherWeight]
         out["squad"] = squad.map { r -> [String: Any] in
             ["id": r.id, "name": r.name, "a": (r.person.a ?? []).map(Int.init), "pos": (r.person.pos ?? []).map(Int.init),
-             "rs": r.roleScores.indices.map { r.roleScores[$0] }, "best": r.bestRoleScore, "ca": r.person.ca, "positions": r.positions]
+             "rs": r.roleScores.indices.map { r.roleScores[$0] }, "best": r.bestRoleScore, "meta": r.meta, "metaRating": r.metaRating, "p": (r.person.p ?? []).map(Int.init), "ca": r.person.ca, "positions": r.positions]
         }
         out["report"] = ["level": report.level, "slots": report.slots.map { ["label": $0.slot.label, "pos": $0.slot.position, "role": $0.slot.role,
             "oop": $0.slot.oop, "starter": $0.starter?.id ?? 0, "score": $0.starterScore, "backup": $0.backup?.id ?? 0, "bscore": $0.backupScore] }]

@@ -26,6 +26,8 @@ public struct PlayerRow: Identifiable, Sendable, Hashable {
     public var selectedRoleScore: Double = 0
     /// Match-engine "meta" score (see Meta), 1–20.
     public var meta: Double = 0
+    /// Meta as a percentile among every player in the scan (0–100).
+    public var metaRating: Int = 0
     /// CA gained since the reference scan; `PlayerRow.noGrowth` when unknown.
     public var growth: Int = PlayerRow.noGrowth
     public static let noGrowth = -999
@@ -90,7 +92,9 @@ public enum RowBuilder {
         let resolved = Roles.resolve(attrKeys: meta.playerAttrKeys, positionKeys: meta.positionKeys)
         let metaWeights = Meta.resolve(meta)
         let posKeys = meta.positionKeys
-        return people.map { p in
+        var keeper = [Bool]()
+        keeper.reserveCapacity(people.count)
+        var rows = people.map { p in
             let fam = p.pos ?? []
             let natural = Set(fam.indices.filter { fam[$0] >= 15 })
             let posText = fam.indices.filter { fam[$0] >= 15 }
@@ -119,10 +123,13 @@ public enum RowBuilder {
                              selectedRoleScore: best >= 0 ? scores[best] : 0)
             let gk = !fam.isEmpty && fam[0] >= 15 && (fam.max() ?? 0) == fam[0]
             row.meta = Meta.score(metaWeights, attrs: attrs, personality: p.p, isGoalkeeper: gk)
+            keeper.append(gk)
             if let g = growth[p.id] { row.growth = g }
             if let prev = previousIds { row.isNew = !prev.contains(p.id) }
             return row
         }
+        Meta.calibrate(&rows, keeper: keeper)
+        return rows
     }
 
     public static func staff(_ people: [Person], reference: Date) -> [StaffRow] {

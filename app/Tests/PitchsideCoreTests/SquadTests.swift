@@ -36,8 +36,12 @@ final class SquadTests: XCTestCase {
         let calm = t.make("Calm", club: nil, pos: ["MC"], level: 14, pressure: 15)
         let nervy = t.make("Nervy", club: nil, pos: ["MC"], level: 14, pressure: 3)
         let gk = t.make("GK", club: nil, pos: ["GK"], level: 14)
-        let r = rows([calm, nervy, gk])
-        XCTAssertEqual(r[0].meta - r[1].meta, 1.0, accuracy: 0.05)
+        let edgy = t.make("Edgy", club: nil, pos: ["MC"], level: 14, pressure: 7)
+        let r = rows([calm, nervy, gk, edgy])
+        // A quarter point per point of Pressure below 8: 3 costs 1.25, 7 costs 0.25.
+        XCTAssertEqual(r[0].meta - r[1].meta, 1.25, accuracy: 0.06)
+        XCTAssertEqual(r[0].meta - r[3].meta, 0.25, accuracy: 0.06)
+        XCTAssertGreaterThan(r[0].metaRating, r[1].metaRating)
         XCTAssertTrue(r[2].isGoalkeeper)
         XCTAssertEqual(r[2].meta, 14, accuracy: 0.05)
     }

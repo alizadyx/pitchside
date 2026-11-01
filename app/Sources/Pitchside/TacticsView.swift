@@ -270,12 +270,29 @@ struct InstructionsPane: View {
     @Environment(Store.self) private var store
     static let phases = ["In possession", "Out of possession", "Goalkeeper", "Set pieces"]
 
+    /// The FM preset style being compared: your pick, else your tactic's style, else the best-fitting preset's.
+    private var presetStyle: FMStyle? {
+        let names = FMPresets.styleNames
+        if names.contains(store.instructionsPresetStyle) { return FMPresets.style(store.instructionsPresetStyle) }
+        if let s = store.workingFormation.style, names.contains(s) { return FMPresets.style(s) }
+        return store.presetFits.first.flatMap { FMPresets.style($0.preset.style) }
+    }
+
     var body: some View {
         @Bindable var store = store
         ScrollView {
             if let ins = store.tacticsInstructions {
+                let preset = presetStyle
+                let presetIns = preset?.catalogueInstructions() ?? [:]
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
+                        Picker("FM preset", selection: $store.instructionsPresetStyle) {
+                            Text("Auto\(preset.map { " (\($0.name))" } ?? "")").tag("")
+                            Divider()
+                            ForEach(FMPresets.styleNames, id: \.self) { Text($0).tag($0) }
+                        }
+                        .fixedSize()
+                        .help("The FM preset style to compare with. Auto: your tactic's style, else the preset that suits your squad best")
                         SourcePicker()
                         Picker("Going into games", selection: $store.tacticsStance) {
                             Text(autoLabel).tag(-1)
@@ -284,30 +301,28 @@ struct InstructionsPane: View {
                         }
                         .fixedSize()
                         .help("Auto works it out from where your XI ranks in your league (Compare teams)")
-                        if !store.leagueProfiles.isEmpty {
-                            Text("League: \(store.myLeague ?? "") (\(store.leagueProfiles.count) clubs)")
-                                .font(.caption).foregroundStyle(.secondary)
-                        } else if store.compareBusy {
-                            ProgressView().controlSize(.small)
-                        }
+                        if store.compareBusy { ProgressView().controlSize(.small) }
                         Spacer()
-                        Button {
-                            store.applySuggestedInstructions()
-                        } label: { Label("Use all suggestions", systemImage: "wand.and.stars") }
-                        .help("Copies the suggested mentality, style and instructions into your tactic")
+                        Menu {
+                            Button("FM preset's instructions") { if let preset { store.applyPresetInstructions(preset) } }
+                            Button("Pitchside's suggestions") { store.applySuggestedInstructions() }
+                        } label: { Label("Use in my tactic", systemImage: "arrow.right.circle") }
+                        .fixedSize()
+                        .help("Copies one column, with its mentality and style, into your tactic")
                     }
                     HStack(spacing: 14) {
-                        HStack(spacing: 4) { Circle().fill(Color.orange).frame(width: 6, height: 6); Text("yours differs from the suggestion") }
-                        HStack(spacing: 4) { Capsule().fill(Theme.gold.opacity(0.4)).frame(width: 18, height: 9); Text("strong reason") }
-                        HStack(spacing: 4) { Capsule().fill(Color.accentColor.opacity(0.4)).frame(width: 18, height: 9); Text("mild reason") }
+                        legend(.green, "agrees with the preset")
+                        legend(.orange, "Pitchside would change it")
+                        legend(.blue, "Pitchside would add it")
+                        legend(.secondary.opacity(0.5), "no reason to change the preset")
                     }
                     .font(.caption).foregroundStyle(.secondary)
                     HStack(alignment: .top, spacing: 12) {
-                        mentalityCard(ins)
+                        mentalityCard(ins, preset)
                         styles(ins.styles)
                     }
-                    ForEach(Self.phases, id: \.self) { phase in section(phase, ins) }
-                    Text("“Suggested” only appears where your squad gives a clear reason; leave the rest on FM's default. Your choices are saved with your tactic. Names follow FM27's tactic screens; the wording in-game may differ slightly.")
+                    ForEach(Self.phases, id: \.self) { phase in section(phase, ins, presetIns, preset?.name ?? "preset") }
+                    Text("Pitchside only suggests a setting where your squad gives a clear reason, so where it says nothing, the preset's choice is fine for your players. Names follow FM27's tactic screens; the wording in-game may differ slightly.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(14)
@@ -315,29 +330,29 @@ struct InstructionsPane: View {
         }
     }
 
+    private func legend(_ c: Color, _ t: String) -> some View {
+        HStack(spacing: 4) { Circle().fill(c).frame(width: 7, height: 7); Text(t) }
+    }
+
     private var autoLabel: String {
         guard let a = store.autoStance else { return "Auto (needs your league)" }
         return "Auto: \(a.0.title.lowercased()) (\(a.rank) of \(a.of))"
     }
 
-    private func mentalityCard(_ ins: TacticsAdvisor.Instructions) -> some View {
+    private func mentalityCard(_ ins: TacticsAdvisor.Instructions, _ preset: FMStyle?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("MENTALITY").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            HStack(spacing: 6) {
-                Text("Suggested").font(.caption).foregroundStyle(.secondary)
-                Text(ins.mentality).font(.title3.bold()).foregroundStyle(Theme.gold)
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("FM preset").font(.caption).foregroundStyle(.secondary)
+                    Text(preset?.mentality ?? "—").font(.title3.bold())
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Pitchside").font(.caption).foregroundStyle(.secondary)
+                    Text(ins.mentality).font(.title3.bold()).foregroundStyle(Theme.gold)
+                }
             }
             Text(ins.mentalityReason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Picker("Yours", selection: Binding(get: { store.workingFormation.mentality ?? "" },
-                                               set: { store.setMentality($0.isEmpty ? nil : $0) })) {
-                Text("Not set").tag("")
-                ForEach(TacticsAdvisor.mentalities, id: \.self) { Text($0).tag($0) }
-            }
-            Picker("Style", selection: Binding(get: { store.workingFormation.style ?? "" },
-                                               set: { store.setStyle($0.isEmpty ? nil : $0) })) {
-                Text("Not set").tag("")
-                ForEach(TacticsAdvisor.tacticalStyles, id: \.self) { Text($0).tag($0) }
-            }
         }
         .frame(width: 260, alignment: .leading)
         .fmCard()
@@ -359,26 +374,37 @@ struct InstructionsPane: View {
         .fmCard()
     }
 
-    private func section(_ title: String, _ ins: TacticsAdvisor.Instructions) -> some View {
+    private func section(_ title: String, _ ins: TacticsAdvisor.Instructions, _ presetIns: [String: String], _ presetName: String) -> some View {
         let specs = TacticsAdvisor.catalogue.filter { $0.phase == title }
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     .frame(width: 210, alignment: .leading)
-                Text("SUGGESTED").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(width: 200, alignment: .leading)
-                Text("YOURS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(width: 200, alignment: .leading)
+                Text(presetName.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(width: 180, alignment: .leading)
+                Text("PITCHSIDE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(width: 180, alignment: .leading)
                 Text("WHY").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             }
             ForEach(specs) { spec in
                 let sug = ins.items.first { $0.name == spec.name }
-                let mine = store.workingFormation.instructions?[spec.name]
-                let differs = sug.map { (mine ?? "") != $0.setting } ?? false
+                let pre = presetIns[spec.name]
+                let (dot, why): (Color, String) = {
+                    switch (pre, sug) {
+                    case let (p?, s?) where p == s.setting: return (.green, s.reason)
+                    case let (_?, s?): return (.orange, s.reason)
+                    case let (nil, s?): return (.blue, s.reason)
+                    case (_?, nil): return (.secondary.opacity(0.5), "Nothing in your squad argues against it.")
+                    default: return (.clear, "")
+                    }
+                }()
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     HStack(spacing: 5) {
-                        Circle().fill(differs ? Color.orange : .clear).frame(width: 6, height: 6)
+                        Circle().fill(dot).frame(width: 7, height: 7)
                         Text(spec.name).font(.callout)
                     }
                     .frame(width: 200, alignment: .leading)
+                    Text(pre ?? "Default").font(.callout.weight(pre == nil ? .regular : .semibold))
+                        .foregroundStyle(pre == nil ? .secondary : .primary)
+                        .frame(width: 180, alignment: .leading)
                     Group {
                         if let sug {
                             Text(sug.setting).font(.callout.bold())
@@ -386,23 +412,15 @@ struct InstructionsPane: View {
                                 .background((sug.strength > 0.6 ? Theme.gold : Color.accentColor).opacity(0.22), in: Capsule())
                                 .help(sug.strength > 0.6 ? "Strong reason in your squad" : "Mild reason — worth trying")
                         } else {
-                            Text("Default").font(.callout).foregroundStyle(.secondary)
+                            Text("—").font(.callout).foregroundStyle(.secondary)
+                                .help("No clear reason in your squad either way")
                         }
                     }
-                    .frame(width: 200, alignment: .leading)
-                    Picker(spec.name, selection: Binding(get: { mine ?? "" },
-                                                         set: { store.setInstruction(spec.name, $0.isEmpty ? nil : $0) })) {
-                        Text("Default").tag("")
-                        ForEach(spec.options, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden()
-                    .frame(width: 200, alignment: .leading)
-                    Text(sug?.reason ?? "").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 180, alignment: .leading)
+                    Text(why).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 1)
-                .background(differs ? Color.orange.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
-                .help(differs ? "Yours (\(mine ?? "Default")) differs from the suggestion (\(sug?.setting ?? ""))" : "")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

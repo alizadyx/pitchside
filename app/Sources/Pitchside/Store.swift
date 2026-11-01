@@ -722,6 +722,18 @@ final class Store {
     func setStyle(_ st: String?) { var f = workingFormation; f.style = st; formationEdited = true; workingFormation = f }
 
     /// Copies every suggested instruction (and the mentality and best-fitting style) into your tactic.
+    /// FM preset style the Instructions tab compares with ("" = automatic).
+    var instructionsPresetStyle = ""
+
+    func applyPresetInstructions(_ style: FMStyle) {
+        var f = workingFormation
+        f.instructions = style.catalogueInstructions()
+        f.mentality = style.mentality
+        f.style = style.name
+        formationEdited = true
+        workingFormation = f
+    }
+
     func applySuggestedInstructions() {
         guard let ins = tacticsInstructions else { return }
         var f = workingFormation

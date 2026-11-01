@@ -148,6 +148,11 @@ final class TacticsTests: XCTestCase {
         XCTAssertEqual(ranked[0].fit.outOfPosition, 0, ranked[0].preset.title)
         let five = ranked.first { $0.preset.ip.hasPrefix("5") }!
         XCTAssertLessThan(five.rating, ranked[0].rating)
+        // Every style asks something of the XI; Gegenpress's press is among its heaviest demands.
+        for f in ranked { XCTAssertFalse(f.style?.demands.isEmpty ?? true, f.preset.title) }
+        let gp = ranked.first { $0.preset.style == "Gegenpress" }!
+        XCTAssertTrue(gp.style!.demands.prefix(3).contains { $0.label.hasPrefix("Line of Engagement") }, gp.style!.demands.map(\.label).joined(separator: ", "))
+        XCTAssertTrue((1...20).contains(gp.styleScore))
     }
 
     func testSetPiecesAndCaptain() {

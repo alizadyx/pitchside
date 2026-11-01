@@ -15,6 +15,7 @@ struct PresetsPane: View {
                         summary(pf)
                         TacticsPitch(fit: pf.fit, scale: store.squadScale).frame(maxWidth: 560).frame(maxWidth: .infinity)
                         picksTable(pf)
+                        if let r = pf.style { demands(pf.preset.style, r) }
                         if let style = FMPresets.style(pf.preset.style) { instructions(style) }
                     }
                     .padding(14)
@@ -24,18 +25,31 @@ struct PresetsPane: View {
         }
     }
 
-    private var shown: [TacticsAdvisor.PresetFit] {
-        store.presetFits.filter { store.presetStyle.isEmpty || $0.preset.style == store.presetStyle }
+    private var shown: [TacticsAdvisor.PresetFit] { store.presetsShown }
+
+    /// The score the list is ranked by, as shown.
+    private func shownScore(_ f: TacticsAdvisor.PresetFit) -> Double {
+        switch store.presetSort { case 1: f.styleScore; case 2: f.combined; default: f.fit.level }
     }
 
     private var list: some View {
         @Bindable var store = store
-        let best = store.presetFits.first?.id
+        let shown = self.shown
+        let best = shown.first
         return VStack(spacing: 0) {
-            Picker("Style", selection: $store.presetStyle) {
-                Text("All styles").tag("")
-                Divider()
-                ForEach(FMPresets.styleNames, id: \.self) { Text($0).tag($0) }
+            VStack(alignment: .leading, spacing: 6) {
+                Picker("Style", selection: $store.presetStyle) {
+                    Text("All styles").tag("")
+                    Divider()
+                    ForEach(FMPresets.styleNames, id: \.self) { Text($0).tag($0) }
+                }
+                Picker("Rank by", selection: $store.presetSort) {
+                    Text("Roles").tag(0)
+                    Text("Style fit").tag(1)
+                    Text("Both").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .help("Roles: how well your best XI plays the preset's roles. Style fit: how well it suits the style's team instructions. Both: the two averaged.")
             }
             .padding(8)
             List(selection: Binding(get: { store.presetFit?.id }, set: { store.presetChoice = $0 })) {
@@ -44,16 +58,17 @@ struct PresetsPane: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(f.preset.name).font(.callout.weight(.semibold)).lineLimit(1)
-                                Text(detail(f)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                Text(detail(f, best)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                             Spacer()
-                            Text(String(format: "%.1f", f.fit.level)).bold().monospacedDigit()
+                            Text(String(format: "%.1f", f.fit.level)).bold(store.presetSort != 1).monospacedDigit()
                                 .foregroundStyle(store.scoreColor(f.fit.level))
-                            Text("\(Int(TeamCompare.rating(f.fit.level).rounded()))").monospacedDigit()
-                                .foregroundStyle(.secondary).frame(minWidth: 24, alignment: .trailing)
-                                .help("Rating (0–100)")
-                            Image(systemName: "crown.fill").foregroundStyle(f.id == best ? Theme.gold : .clear)
-                                .help(f.id == best ? "Best preset for your squad" : "")
+                                .frame(minWidth: 30, alignment: .trailing)
+                            Text(String(format: "%.1f", f.styleScore)).bold(store.presetSort != 0).monospacedDigit()
+                                .foregroundStyle(gapColor(f.styleScore, best: shown.map(\.styleScore).max() ?? 0))
+                                .frame(minWidth: 30, alignment: .trailing)
+                            Image(systemName: "crown.fill").foregroundStyle(f.id == best?.id ? Theme.gold : .clear)
+                                .help(f.id == best?.id ? "Best preset for your squad by the chosen ranking" : "")
                         }
                         .tag(f.id)
                     }
@@ -61,8 +76,10 @@ struct PresetsPane: View {
                     HStack {
                         Text("FM27 presets for your squad")
                         Spacer()
-                        Text("Level").help("XI level (1–20): average score of the best eleven in this preset's roles")
-                        Text("Rating").frame(minWidth: 24, alignment: .trailing).help("XI level on 0–100")
+                        Text("Roles").frame(minWidth: 30, alignment: .trailing)
+                            .help("XI level (1–20): average score of the best eleven in this preset's roles")
+                        Text("Style").frame(minWidth: 30, alignment: .trailing)
+                            .help("Style fit (1–20): how well that XI's attributes suit the style's team instructions")
                         Image(systemName: "crown.fill").foregroundStyle(.clear)
                     }
                 }
@@ -70,10 +87,19 @@ struct PresetsPane: View {
         }
     }
 
-    private func detail(_ f: TacticsAdvisor.PresetFit) -> String {
+    private func detail(_ f: TacticsAdvisor.PresetFit, _ best: TacticsAdvisor.PresetFit?) -> String {
         var s = store.presetStyle.isEmpty ? f.preset.style : String(format: "depth %.1f", f.fit.depth)
+        if let best, best.id != f.id {
+            s += String(format: " · %+.1f", shownScore(f) - shownScore(best))
+        }
         if f.fit.outOfPosition > 0 { s += " · \(f.fit.outOfPosition) out of position" }
         return s
+    }
+
+    /// Green at the best, fading to red one point below: differences between presets are small.
+    private func gapColor(_ v: Double, best: Double) -> Color {
+        let d = best - v
+        return d < 0.15 ? .green : d < 0.4 ? Color(red: 0.6, green: 0.8, blue: 0.3) : d < 0.7 ? .yellow : d < 1 ? .orange : .red
     }
 
     private func summary(_ pf: TacticsAdvisor.PresetFit) -> some View {
@@ -92,6 +118,8 @@ struct PresetsPane: View {
                     .help(TeamCompare.metric("rating")?.explanation ?? "")
                 Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
                 Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
+                Stat(title: "Style fit", value: String(format: "%.1f", pf.styleScore), color: AttrColor.color(Int(pf.styleScore.rounded())))
+                    .help("How well this XI's attributes suit the style's team instructions (1–20). Separate from the role scores.")
                 if let m = FMPresets.style(pf.preset.style)?.mentality {
                     Stat(title: "Mentality", value: m, color: .secondary)
                 }
@@ -151,6 +179,35 @@ struct PresetsPane: View {
             Text(Roles.role(code)?.name ?? code).lineLimit(1)
             Text(String(format: "%.1f", score)).monospacedDigit().foregroundStyle(store.scoreColor(score))
         }
+    }
+
+    private func demands(_ style: String, _ r: PresetStyle.Result) -> some View {
+        let weakest = r.demands.min { $0.score < $1.score }?.id
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("HOW YOUR XI SUITS \(style.uppercased())").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
+                ForEach(r.demands) { d in
+                    GridRow {
+                        Text(d.label).lineLimit(1)
+                        Text(d.group).foregroundStyle(.secondary).lineLimit(1)
+                        Text(String(format: "%.1f", d.score)).bold().monospacedDigit()
+                            .foregroundStyle(AttrColor.color(Int(d.score.rounded())))
+                        HStack(spacing: 4) {
+                            Text(d.attributes.map(AttributeGroups.label).joined(separator: ", "))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            if d.id == weakest && r.demands.count > 1 {
+                                Text("weakest").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                            }
+                        }
+                    }
+                    .font(.callout)
+                    .help("Average of these attributes across the \(d.group.lowercased()) in the XI, most important first")
+                }
+            }
+            Text("Each instruction that isn't Standard asks something of some players. Scores are their attribute averages, heavier instructions count more.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .fmCard()
     }
 
     private func instructions(_ style: FMStyle) -> some View {

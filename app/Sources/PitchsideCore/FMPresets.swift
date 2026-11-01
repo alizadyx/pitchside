@@ -72,7 +72,12 @@ extension TacticsAdvisor {
         /// Per pick (same order as fit.picks): OOP position and the player's familiarity there.
         public let oopPositions: [String]
         public let oopFamiliarity: [UInt8]
+        /// How the XI suits the style's team instructions (separate from the role scores).
+        public let style: PresetStyle.Result?
         public var rating: Double { fit.rating }
+        public var styleScore: Double { style?.score ?? 0 }
+        /// Roles and style fit weighed equally.
+        public var combined: Double { (fit.level + styleScore) / 2 }
     }
 
     /// Cost of an unfamiliar OOP position. The player only spends part of the game there,
@@ -125,7 +130,10 @@ extension TacticsAdvisor {
         let out = filled.filter { $0.familiarity < 15 }.count
         let fit = FormationFit(formation: formation, picks: picks, bench: Array(bench),
                                level: level, depth: depth, outOfPosition: out)
-        return PresetFit(preset: preset, fit: fit, oopPositions: preset.slots.map(\.oopPosition), oopFamiliarity: oopFam)
+        let xi = picks.compactMap { p in p.player.map { ($0, p.slot.position) } }
+        let style = FMPresets.style(preset.style).map { PresetStyle.evaluate($0, xi: xi, meta: meta) }
+        return PresetFit(preset: preset, fit: fit, oopPositions: preset.slots.map(\.oopPosition),
+                         oopFamiliarity: oopFam, style: style)
     }
 
     /// Every FM preset fitted to the squad, best first.

@@ -185,8 +185,20 @@ final class Store {
     private(set) var presetFits: [TacticsAdvisor.PresetFit] = []
     var presetChoice: String?
     var presetStyle = ""
+    /// 0 by roles, 1 by style fit, 2 both.
+    var presetSort = 0
+    func presetKey(_ f: TacticsAdvisor.PresetFit) -> Double {
+        switch presetSort {
+        case 1: return f.styleScore
+        case 2: return f.combined
+        default: return f.fit.level - 0.4 * Double(f.fit.outOfPosition) + 0.1 * f.fit.depth
+        }
+    }
+    var presetsShown: [TacticsAdvisor.PresetFit] {
+        presetFits.filter { presetStyle.isEmpty || $0.preset.style == presetStyle }.sorted { presetKey($0) > presetKey($1) }
+    }
     var presetFit: TacticsAdvisor.PresetFit? {
-        let shown = presetFits.filter { presetStyle.isEmpty || $0.preset.style == presetStyle }
+        let shown = presetsShown
         return shown.first { $0.id == presetChoice } ?? shown.first
     }
     /// The formation being looked at in Tactics (nil = the best one).

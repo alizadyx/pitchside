@@ -230,7 +230,7 @@ internal static class TacticProbe
     }
 
     /// <summary>The object containing <paramref name="addr"/>: nearest vtable at or before it.</summary>
-    private static (ulong owner, string cls) Owner(Memory mem, ulong addr, int maxBack)
+    internal static (ulong owner, string cls) Owner(Memory mem, ulong addr, int maxBack)
     {
         for (ulong a = addr & ~7UL; a + (ulong)maxBack > addr && a > 0x1000; a -= 8)
         {
@@ -242,7 +242,7 @@ internal static class TacticProbe
         return (0, null);
     }
 
-    private static void DumpObject(Memory mem, StringBuilder sb, ulong obj, int len, int depth)
+    internal static void DumpObject(Memory mem, StringBuilder sb, ulong obj, int len, int depth)
     {
         sb.AppendLine(Hex("   obj", mem.ReadBytes(obj, len)));
         for (int off = 0; off < len; off += 8)
@@ -287,7 +287,7 @@ internal static class TacticProbe
         return null;
     }
 
-    private static string Hex(string label, byte[] b)
+    internal static string Hex(string label, byte[] b)
     {
         if (b == null) return $"{label}: (unreadable)";
         var sb = new StringBuilder();

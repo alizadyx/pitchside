@@ -16,7 +16,7 @@ public class Plugin : BasePlugin
 {
     public const string Id = "local.pitchside.plugin";
     public const string Name = "Pitchside";
-    public const string Version = "0.7.2";
+    public const string Version = "0.7.3";
 
     private static int _busy;
 
@@ -67,6 +67,13 @@ public class Plugin : BasePlugin
                     File.Delete(Paths.TacticFlag);
                     req = new Request { Mode = "tactics", Id = "flag", Club = name };
                 }
+                else if (File.Exists(Paths.ShortlistFlag))
+                {
+                    // The file lists a few players on your FM shortlist, one per line, as FM shows the names.
+                    string names = File.ReadAllText(Paths.ShortlistFlag);
+                    File.Delete(Paths.ShortlistFlag);
+                    req = new Request { Mode = "shortlist", Id = "flag", Club = names };
+                }
                 if (req != null) Start(req);
             }
             catch (Exception e) { Pitchside.Log.Warn("poll: " + e.Message); }
@@ -88,6 +95,7 @@ public class Plugin : BasePlugin
                 Pitchside.Log.Info($"Starting {req.Mode} ({req.Targets?.Count ?? 0} targets)");
                 if (string.Equals(req.Mode, "discover", StringComparison.OrdinalIgnoreCase)) Discovery.Run(req);
                 else if (string.Equals(req.Mode, "tactics", StringComparison.OrdinalIgnoreCase)) TacticProbe.Run(req);
+                else if (string.Equals(req.Mode, "shortlist", StringComparison.OrdinalIgnoreCase)) Dumper.RunShortlistProbe(req);
                 else Dumper.Run(req);
             }
             catch (Exception e)

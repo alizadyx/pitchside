@@ -53,6 +53,22 @@ final class Store {
     /// The Shortlist screen shows FM's shortlist instead of your stars.
     var shortlistFromFM = false { didSet { refilter() } }
 
+    /// Empties the list the Shortlist screen is showing (your stars, or the FM shortlist).
+    func clearShortlist(fm: Bool) {
+        if fm {
+            fmShortlist = []
+            UserDefaults.standard.set([Int](), forKey: "fmShortlist")
+        } else {
+            for id in shortlist {
+                if let i = allPlayers.firstIndex(where: { $0.id == id }) { allPlayers[i].shortlisted = false }
+            }
+            shortlist = []
+            UserDefaults.standard.set([Int](), forKey: "shortlist")
+        }
+        refilter()
+        if signFromShortlist { refreshSuggestions() }
+    }
+
     func setFMShortlist(_ ids: Set<UInt32>, replace: Bool) {
         fmShortlist = replace ? ids : fmShortlist.union(ids)
         UserDefaults.standard.set(fmShortlist.map { Int($0) }, forKey: "fmShortlist")

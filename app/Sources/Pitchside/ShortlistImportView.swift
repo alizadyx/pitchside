@@ -14,7 +14,7 @@ enum ScreenshotReader {
         return (request.results ?? []).compactMap { obs -> ShortlistImport.Token? in
             guard let c = obs.topCandidates(1).first else { return nil }
             let b = obs.boundingBox            // normalised, origin bottom left
-            return ShortlistImport.Token(text: c.string, x: Double(b.minX), y: Double(1 - b.midY), h: Double(b.height))
+            return ShortlistImport.Token(text: c.string, x: Double(b.minX), y: Double(1 - b.midY), h: Double(b.height), w: Double(b.width))
         }
     }
 }
@@ -28,6 +28,7 @@ struct ShortlistImportSheet: View {
     @State private var shots = 0
     @State private var matches: [ShortlistImport.Match] = []
     @State private var error: String?
+    @State private var lastTokens: [[ShortlistImport.Token]] = []
 
     /// Added to the FM shortlist: sure and likely matches. Unsure ones are only shown, for you to check.
     private var found: [ShortlistImport.Match] { matches.filter { $0.player != nil && $0.confidence != .unsure } }
@@ -61,6 +62,10 @@ struct ShortlistImportSheet: View {
                 .frame(minHeight: 260)
             }
             HStack {
+                if !lastTokens.isEmpty {
+                    Button("Save recognised text") { saveTokens() }
+                        .help("Writes what the Mac read from the screenshots to pitchside-ocr.json on your Desktop, to check problems")
+                }
                 Spacer()
                 Button("Cancel") { dismiss() }
                 Button("Add to FM shortlist") { save(replace: false) }.disabled(found.isEmpty)
@@ -103,13 +108,23 @@ struct ShortlistImportSheet: View {
             }
             let lines = tokens.flatMap { ShortlistImport.lines($0) }
             let result = ShortlistImport.match(lines, index: .init(rows))
-            let failedCount = failed, noRows = lines.isEmpty
+            let failedCount = failed, noRows = lines.isEmpty, tokensRead = tokens
             await MainActor.run {
                 matches = result
+                lastTokens = tokensRead
                 busy = false
                 if failedCount > 0 { error = "\(failedCount) file\(failedCount == 1 ? "" : "s") couldn't be read." }
                 else if noRows { error = "No player rows found. Are these screenshots of an FM player list?" }
             }
+        }
+    }
+
+    private func saveTokens() {
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop/pitchside-ocr.json")
+        if let data = try? JSONEncoder().encode(lastTokens), (try? data.write(to: url)) != nil {
+            error = "Saved to your Desktop as pitchside-ocr.json."
+        } else {
+            error = "Couldn't save the recognised text."
         }
     }
 

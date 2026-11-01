@@ -10,6 +10,7 @@ struct PlayersView: View {
     @State private var selection: UInt32?
     @AppStorage("showFilters") private var showFilters = true
     @State private var showImport = false
+    @State private var confirmClear = false
 
     var body: some View {
         @Bindable var store = store
@@ -45,6 +46,12 @@ struct PlayersView: View {
                     .help("Your own stars, or FM's shortlist imported from screenshots")
                     Button { showImport = true } label: { Label("Import from FM…", systemImage: "photo.on.rectangle") }
                         .help("Read FM's shortlist from screenshots of it")
+                    Button("Clear list") { confirmClear = true }
+                        .help("Remove every player from this list")
+                        .confirmationDialog(store.shortlistFromFM ? "Clear the FM shortlist?" : "Remove all your stars?",
+                                            isPresented: $confirmClear) {
+                            Button("Clear", role: .destructive) { store.clearShortlist(fm: store.shortlistFromFM) }
+                        }
                     Button("Copy as CSV") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(store.exportShortlistCSV(), forType: .string)

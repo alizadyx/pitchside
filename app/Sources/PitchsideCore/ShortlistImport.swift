@@ -9,7 +9,36 @@ public enum ShortlistImport {
     public struct Token: Sendable, Codable {
         public let text: String
         public let x: Double, y: Double, h: Double
-        public init(text: String, x: Double, y: Double, h: Double) { self.text = text; self.x = x; self.y = y; self.h = h }
+        /// Width, when known: lets a phrase that spans several cells be split into words in place.
+        public let w: Double?
+        public init(text: String, x: Double, y: Double, h: Double, w: Double? = nil) {
+            self.text = text; self.x = x; self.y = y; self.h = h; self.w = w
+        }
+    }
+
+    /// The Mac's text recognition returns phrases, sometimes across cells ("ENG M (C)", "20 Unknown").
+    /// Split them into words, each placed along the phrase in proportion to its position in the text.
+    static func words(_ tokens: [Token]) -> [Token] {
+        tokens.flatMap { t -> [Token] in
+            let parts = t.text.split(separator: " ")
+            guard parts.count > 1 else { return [t] }
+            let total = Double(max(1, t.text.count)), width = t.w ?? 0
+            var out: [Token] = [], offset = 0
+            for p in parts {
+                let start = t.text.distance(from: t.text.startIndex, to: p.startIndex)
+                out.append(Token(text: String(p), x: t.x + width * Double(start) / total, y: t.y, h: t.h, w: width * Double(p.count) / total))
+                offset = start
+            }
+            _ = offset
+            return out
+        }
+    }
+
+    /// "ENG", or "ENGÙ"/"ENG," when a flag or mark is read with it → "ENG".
+    static func nationCode(_ w: String) -> String? {
+        guard w.count <= 5, let f = w.first, f.isUppercase else { return nil }
+        let letters = String(w.filter { ("A"..."Z").contains($0) })
+        return letters.count == 3 && w.prefix(3) == letters && Nations.byCode[letters] != nil ? letters : nil
     }
 
     /// A table row as read from the screen.
@@ -39,14 +68,14 @@ public enum ShortlistImport {
     static let headers: Set<String> = ["inf", "name", "age", "nation", "club", "position", "value", "wage"]
 
     static func isAge(_ w: String) -> Bool { Int(w).map { (14...50).contains($0) } ?? false }
-    static func isNation(_ w: String) -> Bool { w.count == 3 && w.allSatisfy { $0.isUppercase && $0.isLetter } && Nations.byCode[w] != nil }
+    static func isNation(_ w: String) -> Bool { nationCode(w) != nil }
 
     /// Groups tokens into table rows and reads each as name, age and nation. Rows are anchored on the
     /// nation codes (every row has one, at the row's centre line) or, without a Nation column, on the
     /// ages; every other piece of text joins the nearest row. Two-line cells (position + role) then
     /// can't spill into the next player's row.
     public static func lines(_ tokens: [Token]) -> [Line] {
-        let toks = tokens.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        let toks = words(tokens.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty })
         let nat = toks.filter { isNation($0.text) }, age = toks.filter { isAge($0.text) }
         var anchors: [Double] = []
         // Nation codes and ages both sit on a row's centre line; either one anchors the row.
@@ -103,7 +132,7 @@ public enum ShortlistImport {
         if headers.contains(name.lowercased()) { return nil }
         // Position text ("ST (C)") or other cells misread as a row: real names have lower-case letters.
         guard name.contains(where: \.isLowercase) else { return nil }
-        let nation = natIdx.map { words[$0] }
+        let nation = natIdx.flatMap { nationCode(words[$0]) }
         let age = words[nameEnd...].first(where: isAge).flatMap { Int($0) }
         return Line(name: name, age: age, nation: nation, raw: raw)
     }

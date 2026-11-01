@@ -46,6 +46,24 @@ final class SquadTests: XCTestCase {
         XCTAssertEqual(r[2].meta, 14, accuracy: 0.05)
     }
 
+    func testShortlistImportParsesAndMatches() {
+        // A row as text recognition reads it, with a stray icon letter and FM's status chip.
+        let l = ShortlistImport.parse("A FrA Romario Vieira 28 GNB -")!
+        XCTAssertEqual(l.name, "Romario Vieira"); XCTAssertEqual(l.age, 28); XCTAssertEqual(l.nation, "GNB")
+        XCTAssertNil(ShortlistImport.parse("Inf Name Age Nation Club"))
+        XCTAssertEqual(ShortlistImport.normalise("Romário Vieira"), "romario vieira")
+        // Tokens on one line group into a row even when split into pieces.
+        let toks = [ShortlistImport.Token(text: "Lst", x: 0.1, y: 0.5, h: 0.02), .init(text: "Starter 1", x: 0.2, y: 0.505, h: 0.02),
+                    .init(text: "25", x: 0.5, y: 0.5, h: 0.02), .init(text: "Backup 9", x: 0.2, y: 0.6, h: 0.02), .init(text: "25", x: 0.5, y: 0.6, h: 0.02)]
+        XCTAssertEqual(ShortlistImport.lines(toks).map(\.name), ["Starter 1", "Backup 9"])
+        var t = Factory()
+        let all = rows(t.homeSquad())
+        let m = ShortlistImport.match(ShortlistImport.lines(toks) + [ShortlistImport.parse("ee Pw Starter 1 25")!], index: .init(all))
+        XCTAssertEqual(m.count, 2)                        // the repeat is dropped
+        XCTAssertEqual(m[0].player?.name, "Starter 1")
+        XCTAssertEqual(m[0].confidence, .exact)
+    }
+
     func testSquadFindsWeakStrikerAndSuggestsUpgrades() {
         var t = Factory()
         var people = t.homeSquad()

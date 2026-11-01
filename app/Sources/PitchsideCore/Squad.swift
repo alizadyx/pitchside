@@ -297,6 +297,9 @@ public struct SigningCriteria: Sendable, Equatable {
     public var forDepth = false           // compare against the backup instead of the starter
     /// Only these nationalities (matched loosely: "ireland" finds Republic of Ireland); empty = any.
     public var nationalities: [String] = []
+    /// Rank every player given (e.g. your FM shortlist) with no filters at all: no age, budget, interest,
+    /// nationality or minimum gain, and players out of position are kept but scored lower.
+    public var everyone = false
     public init() {}
 
     /// Splits "England, Wales" into its names.
@@ -436,16 +439,24 @@ public enum SquadBuilder {
         let posIdx = meta.positionKeys.firstIndex(of: a.slot.position)
         let baseline = c.forDepth ? (a.backup == nil ? 0 : a.backupScore) : (a.starter == nil ? 0 : a.starterScore)
         var out: [Suggestion] = []
-        for r in rows where r.person.club != report.club && r.person.own != report.club {
-            guard familiarity(r, posIdx) >= minFamiliarity, r.age >= c.minAge, r.age <= c.maxAge,
-                  c.nationalityMatches(r.person.nat) else { continue }
-            let score = slotScore(r, ip: ri, oop: oi)
+        for r in rows where c.everyone || (r.person.club != report.club && r.person.own != report.club) {
+            let fam = familiarity(r, posIdx)
+            var score = slotScore(r, ip: ri, oop: oi)
+            if c.everyone {
+                // Out of position: same cost as in the tactics advisor (unusable there counts 4).
+                score = ((score - (TacticsAdvisor.familiarityPenalty(fam) ?? 4)) * 10).rounded() / 10
+            } else {
+                guard fam >= minFamiliarity, r.age >= c.minAge, r.age <= c.maxAge,
+                      c.nationalityMatches(r.person.nat) else { continue }
+            }
             let gain = score - baseline
-            guard gain >= c.minGain else { continue }
-            if c.maxValueGbp > 0 { guard let v = r.person.val, v <= c.maxValueGbp else { continue } }
-            if c.maxWageGbp > 0, let w = r.person.wage, w > c.maxWageGbp { continue }
             let interest = model?.assess(r, joining: report.club, season: season)
-            if let min = c.minInterest, let i = interest, i.level < min { continue }
+            if !c.everyone {
+                guard gain >= c.minGain else { continue }
+                if c.maxValueGbp > 0 { guard let v = r.person.val, v <= c.maxValueGbp else { continue } }
+                if c.maxWageGbp > 0, let w = r.person.wage, w > c.maxWageGbp { continue }
+                if let min = c.minInterest, let i = interest, i.level < min { continue }
+            }
             out.append(Suggestion(row: r, score: score, gain: gain, interest: interest))
         }
         // Best improvement first; among similar gains, younger and cheaper.

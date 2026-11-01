@@ -48,6 +48,18 @@ final class Store {
 
     // Shortlist & settings (persisted)
     private(set) var shortlist: Set<UInt32> = []
+    /// Players imported from FM's shortlist (screenshots); kept apart from your own stars.
+    private(set) var fmShortlist: Set<UInt32> = Set((UserDefaults.standard.array(forKey: "fmShortlist") as? [Int] ?? []).map { UInt32($0) })
+    /// The Shortlist screen shows FM's shortlist instead of your stars.
+    var shortlistFromFM = false { didSet { refilter() } }
+
+    func setFMShortlist(_ ids: Set<UInt32>, replace: Bool) {
+        fmShortlist = replace ? ids : fmShortlist.union(ids)
+        UserDefaults.standard.set(fmShortlist.map { Int($0) }, forKey: "fmShortlist")
+        shortlistFromFM = true
+        refilter()
+        if signFromShortlist { refreshSuggestions() }
+    }
     /// 0 = both, 1 = men, 2 = women — an instant filter on every list.
     var genderFilter: Int = UserDefaults.standard.object(forKey: "genderFilter") as? Int ?? 1 {
         didSet {
@@ -123,6 +135,8 @@ final class Store {
     /// Estimates how keen players are to join your club; rebuilt per scan and per men's/women's side.
     private(set) var interestModel: InterestModel?
     private var interestModelWomen: Bool?
+    /// Signings come from your imported FM shortlist only (all of it, ranked) instead of the whole database.
+    var signFromShortlist = false { didSet { refreshSuggestions() } }
     var signForDepth = false
     /// Only sign players of these nationalities ("England" or "England, Wales"); empty = any.
     var signNationality: String = UserDefaults.standard.string(forKey: "signNationality") ?? "" {
@@ -342,13 +356,18 @@ final class Store {
     func refilter() {
         guard let meta else { players = []; return }
         filterTask?.cancel()
-        let f = filter, rows = allPlayers, sort = playerSort, perUnit = 1 / max(rate, 0.0001)
+        var base = filter
+        // Shortlist screen showing FM's shortlist: everyone imported from it, not your stars.
+        let fmOnly: Set<UInt32>? = base.shortlistOnly && shortlistFromFM ? fmShortlist : nil
+        if fmOnly != nil { base.shortlistOnly = false }
+        let f = base, rows = allPlayers, sort = playerSort, perUnit = 1 / max(rate, 0.0001)
         let roleIdx = Roles.all.firstIndex { $0.code == f.roleCode }
         let cols = columns(for: "players")
         if cols.contains(where: { $0.id == "gen.interest" }) { ensureInterestModel() }
         let reader = self.reader, score = interestScorer()
         filterTask = Task.detached(priority: .userInitiated) {
             var out = Filtering.apply(f, to: rows, meta: meta, gbpPerUnit: perUnit)
+            if let fmOnly { out = out.filter { fmOnly.contains($0.id) } }
             for i in out.indices {
                 out[i].selectedRoleScore = roleIdx.map { out[i].roleScores[$0] } ?? out[i].bestRoleScore
             }
@@ -396,7 +415,7 @@ final class Store {
 
     func exportShortlistCSV() -> String {
         var lines = ["Name,Age,Club,Positions,CA,PA,Value,Wage,Contract"]
-        for r in allPlayers where r.shortlisted {
+        for r in players {
             let cells = [r.name, "\(r.age)", r.club, r.positions, "\(r.ca)", "\(r.pa)",
                          r.value >= 0 ? "\(r.value)" : "", r.wage >= 0 ? "\(r.wage)" : "", r.expires]
             lines.append(cells.map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }.joined(separator: ","))
@@ -956,8 +975,17 @@ final class Store {
         guard let meta, let report = squadReport,
               let slot = report.slots.first(where: { $0.slot.label == selectedSlot }) else { suggestions = []; return }
         // Up to 200 so sorting by another column still has plenty to choose from.
-        var list = SquadBuilder.suggestions(for: slot, report: report, rows: teamRows, meta: meta,
+        var list: [SquadBuilder.Suggestion]
+        if signFromShortlist {
+            // Your FM shortlist: everyone on it, ranked for this position, nothing filtered out.
+            var c = SigningCriteria(); c.everyone = true; c.forDepth = signForDepth
+            let pool = teamRows.filter { fmShortlist.contains($0.id) }
+            list = SquadBuilder.suggestions(for: slot, report: report, rows: pool, meta: meta,
+                                            criteria: c, interest: interestModel, season: season, limit: pool.count)
+        } else {
+            list = SquadBuilder.suggestions(for: slot, report: report, rows: teamRows, meta: meta,
                                             criteria: signingCriteria(), interest: interestModel, season: season, limit: 200)
+        }
         let cols = columns(for: "signings")
         if !cols.isEmpty, let reader {
             var rows = list.map(\.row)

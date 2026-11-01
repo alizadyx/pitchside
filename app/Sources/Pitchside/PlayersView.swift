@@ -9,6 +9,7 @@ struct PlayersView: View {
     @Environment(Store.self) private var store
     @State private var selection: UInt32?
     @AppStorage("showFilters") private var showFilters = true
+    @State private var showImport = false
 
     var body: some View {
         @Bindable var store = store
@@ -36,6 +37,14 @@ struct PlayersView: View {
                 Spacer(minLength: 8)
                 ColumnsMenu(table: "players")
                 if shortlistOnly {
+                    Picker("Shortlist", selection: $store.shortlistFromFM) {
+                        Text("My stars (\(store.shortlist.count))").tag(false)
+                        Text("From FM (\(store.fmShortlist.count))").tag(true)
+                    }
+                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    .help("Your own stars, or FM's shortlist imported from screenshots")
+                    Button { showImport = true } label: { Label("Import from FM…", systemImage: "photo.on.rectangle") }
+                        .help("Read FM's shortlist from screenshots of it")
                     Button("Copy as CSV") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(store.exportShortlistCSV(), forType: .string)
@@ -85,6 +94,7 @@ struct PlayersView: View {
         .onAppear {
             if store.filter.shortlistOnly != shortlistOnly { store.filter.shortlistOnly = shortlistOnly }
         }
+        .sheet(isPresented: $showImport) { ShortlistImportSheet() }
         .onChange(of: store.filter) { store.refilter() }
         .onChange(of: store.filter.roleCode) { _, code in
             // Picking a role means "who's best at it", so rank by it.

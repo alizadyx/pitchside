@@ -168,6 +168,12 @@ struct SquadView: View {
                         Text("–")
                         NumberField(value: $store.signMaxAge, width: 40)
                     }
+                    Picker("Pool", selection: $store.signFromShortlist) {
+                        Text("Everyone").tag(false)
+                        Text("FM shortlist (\(store.fmShortlist.count))").tag(true)
+                    }
+                    .pickerStyle(.segmented).fixedSize()
+                    .help("FM shortlist: rank every player you imported from FM's shortlist (Shortlist → Import from FM) for the chosen position, with no filters. Players out of position are scored lower, not left out.")
                     Picker("Willing to join", selection: $store.minInterest) {
                         Text("Anyone").tag(0)
                         Text("Doubtful or better").tag(1)

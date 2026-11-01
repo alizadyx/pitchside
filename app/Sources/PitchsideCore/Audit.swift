@@ -67,3 +67,20 @@ public enum Audit {
         return squad.count
         }
 }
+
+extension Audit {
+    /// Screenshot import check: tokens (JSON, one array per screenshot) matched against a scan.
+    public static func shortlist(exportPath: String, tokensPath: String) throws -> String {
+        let file = try JSONDecoder().decode(ExportFile.self, from: Data(contentsOf: URL(fileURLWithPath: exportPath)))
+        let rows = SquadBuilder.team(RowBuilder.players(file.players, meta: file.meta, reference: Date(), shortlist: []), women: false)
+        let shots = try JSONDecoder().decode([[ShortlistImport.Token]].self, from: Data(contentsOf: URL(fileURLWithPath: tokensPath)))
+        let lines = shots.flatMap { ShortlistImport.lines($0) }
+        let matches = ShortlistImport.match(lines, index: .init(rows))
+        var out = "\(lines.count) rows read, \(matches.count) after removing repeats\n"
+        for m in matches {
+            let p = m.player.map { "\($0.name) (\($0.age), \($0.person.nat ?? "?"), \($0.person.club ?? "free"))" } ?? "—"
+            out += "\(m.confidence) \(m.alternatives) | \(m.line.name) \(m.line.age ?? 0) \(m.line.nation ?? "") → \(p)\n"
+        }
+        return out
+    }
+}

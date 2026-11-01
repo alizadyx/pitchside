@@ -192,6 +192,52 @@ internal static partial class Dumper
                 Line(TacticProbe.Hex("   memory", mem.ReadBytes(c.start - 0x40, (int)Math.Min(0x200, c.end - c.start + 0x80))));
                 if (owner != 0 && cls != null) TacticProbe.DumpObject(mem, sb, owner, 0x200, depth: 0);
             }
+            // Id lists: walk out over anything that looks like a person id (known player, or in FM's id ranges),
+            // then find whatever points at (or just before) the first entry.
+            bool LooksId(uint u) => u != 0 && (uidPerson.ContainsKey(u) || u < 0x0400_0000u || (u >= 0x7700_0000u && u < 0x7800_0000u));
+            var arrays = new List<(ulong begin, ulong end)>();
+            foreach (var c in clusters.Where(c => !c.ptr && c.start >= GameHeap && c.uids.Count >= 2))
+            {
+                uint Id(ulong a) { var b = mem.ReadBytes(a, 4); return b == null ? 0 : BinaryPrimitives.ReadUInt32LittleEndian(b); }
+                ulong b0 = c.start, e0 = c.start;
+                while (LooksId(Id(b0 - 4)) && c.start - b0 < 0x10000) b0 -= 4;
+                while (LooksId(Id(e0)) && e0 - c.start < 0x10000) e0 += 4;
+                if (arrays.Any(x => x.begin == b0)) continue;
+                arrays.Add((b0, e0));
+                int n = (int)((e0 - b0) / 4), known = 0;
+                var names2 = new List<string>();
+                for (ulong a = b0; a < e0; a += 4) { uint u = Id(a); if (uidPerson.ContainsKey(u)) { known++; names2.Add(NameOf(u)); } else names2.Add($"#{u}"); }
+                Line();
+                Line($"== Id list {b0:X}–{e0:X}: {n} entries, {known} known players ==");
+                Line(TacticProbe.Hex("   before", mem.ReadBytes(b0 - 0x40, 0x40)));
+                Line(TacticProbe.Hex("   after ", mem.ReadBytes(e0, 0x40)));
+                Line("   first 10: " + string.Join(", ", names2.Take(10)));
+                Line("   last 10:  " + string.Join(", ", names2.Skip(Math.Max(0, n - 10))));
+            }
+            if (arrays.Count > 0)
+            {
+                Status.Write("scanning", 0.7, "Shortlist probe: finding what points at the list…", mode: "shortlist");
+                var near = new ConcurrentBag<(ulong at, ulong v, int k)>();
+                mem.ScanHeap((at, data, w) =>
+                {
+                    if (at < GameHeap) return;
+                    var q = MemoryMarshal.Cast<byte, ulong>(data.Slice(0, data.Length & ~7));
+                    for (int i = 0; i < q.Length; i++)
+                        for (int k = 0; k < arrays.Count; k++)
+                            if (q[i] >= arrays[k].begin - 0x40 && q[i] <= arrays[k].end + 0x10 && near.Count < 2000)
+                                near.Add((at + (ulong)i * 8, q[i], k));
+                }, p => Status.Write("scanning", 0.7 + 0.05 * p, "Shortlist probe: finding what points at the list…", mode: "shortlist"));
+                Line();
+                Line("== Pointers to (or near) each id list ==");
+                foreach (var (at, v, k) in near.Distinct().OrderBy(x => x.k).ThenBy(x => x.v).Take(60))
+                {
+                    var (owner, cls) = TacticProbe.Owner(mem, at, 0x4000);
+                    long rel = (long)v - (long)arrays[k].begin;
+                    Line($"  list {k}: {at:X} → begin{(rel >= 0 ? "+" : "")}{rel}; next qwords {mem.U64(at + 8):X} {mem.U64(at + 16):X}; owner {cls ?? "(no class)"}{(owner != 0 ? $" @ {owner:X} +0x{at - owner:X}" : "")}");
+                    if (cls != null && owner != 0) TacticProbe.DumpObject(mem, sb, owner, 0x100, depth: 0);
+                }
+                if (near.IsEmpty) Line("  (none)");
+            }
             // Vectors: a (begin, end) pointer pair on the heap that spans an id cluster is the list itself.
             var idClusters = clusters.Where(c => c.uids.Count >= 2).OrderByDescending(c => c.uids.Count).Take(8).ToList();
             if (idClusters.Count > 0)

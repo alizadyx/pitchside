@@ -198,7 +198,17 @@ public enum ShortlistImport {
     /// Icons and status chips can come out as stray words before the name ("A", "Pw", "ee FA"):
     /// try the name without up to three leading words, longest first, and keep the first that matches.
     static func matchOne(_ line: Line, _ idx: Index) -> Match {
-        let all = line.name.split(separator: " ").map(String.init)
+        // Words run together ("BradArthur"): split at a lower→upper change, but not after Mc/Mac.
+        let all = line.name.split(separator: " ").flatMap { w -> [String] in
+            let chars = Array(w)
+            guard chars.count > 5 else { return [String(w)] }
+            for i in 2..<chars.count where chars[i].isUppercase && chars[i - 1].isLowercase {
+                let head = String(chars[..<i])
+                if head == "Mc" || head == "Mac" || head.hasSuffix("-") { continue }
+                if i >= 3 { return [head, String(chars[i...])] }
+            }
+            return [String(w)]
+        }
         var variants: [Line] = []
         // A flag icon can also come out as a short word after the name ("Zac Whittle Ss ENG").
         let tails = (all.last.map { $0.count <= 2 } ?? false) && all.count > 2 ? [0, 1] : [0]
@@ -229,13 +239,25 @@ public enum ShortlistImport {
                 let n = c.filter { $0.person.nat == country }
                 if !n.isEmpty { c = n }
             }
+            if c.count > 1 {
+                // Namesakes: the club printed in the same row, or "-" (no club) for a free agent.
+                let raw = line.raw.lowercased()
+                let byClub = c.filter { !$0.club.isEmpty && raw.contains($0.club.lowercased()) }
+                if !byClub.isEmpty { c = byClub }
+                // FM's "FrA" chip (free agent) or "-" in the Club column: the one without a club.
+                else if line.raw.split(separator: " ").contains("FrA") || raw.split(separator: " ").contains("-") {
+                    let free = c.filter { $0.club.isEmpty }
+                    if !free.isEmpty { c = free }
+                }
+            }
             return c
         }
         if let exact = idx.byName[key] {
             let c = narrow(exact)
             let ageOK = line.age.map { a in c.first.map { abs($0.age - a) <= 1 } ?? false } ?? true
-            return Match(line: line, player: c.first, confidence: c.count == 1 && ageOK ? .exact : .unsure,
-                         alternatives: max(0, c.count - 1))
+            let nationOK = line.nation.flatMap { idx.nations[$0] }.map { n in c.first?.person.nat == n } ?? false
+            let conf: Confidence = c.count != 1 ? .unsure : ageOK ? .exact : nationOK ? .likely : .unsure
+            return Match(line: line, player: c.first, confidence: conf, alternatives: max(0, c.count - 1))
         }
         // Small recognition slips: same surname or close spelling, and the age must fit. Only for a
         // full name: loose matching of a stray word ("Ss") finds some unrelated player.
@@ -249,6 +271,8 @@ public enum ShortlistImport {
             pool = idx.byName.filter { k, _ in k.first == key.first && abs(k.count - key.count) <= 2 && distance(k, key) <= 2 }
                 .flatMap(\.value)
         }
+        // Same first initial: "Ben Tomlinson" must not become Joe Tomlinson.
+        pool = pool.filter { normalise($0.name).first == key.first }
         let country = line.nation.flatMap { idx.nations[$0] }
         let c = narrow(pool).filter { r in
             (line.age.map { abs(r.age - $0) <= 1 } ?? true) && (country.map { r.person.nat == $0 } ?? true)

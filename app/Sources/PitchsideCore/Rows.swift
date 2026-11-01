@@ -26,8 +26,11 @@ public struct PlayerRow: Identifiable, Sendable, Hashable {
     public var selectedRoleScore: Double = 0
     /// Match-engine "meta" score (see Meta), 1–20.
     public var meta: Double = 0
-    /// Meta as a percentile among every player in the scan (0–100).
+    /// Meta as a percentile within the player's division (0–100); the whole scan when the division is
+    /// small or unknown (free agents).
     public var metaRating: Int = 0
+    /// Meta percentile among every player in the scan.
+    public var metaRatingAll: Int = 0
     /// CA gained since the reference scan; `PlayerRow.noGrowth` when unknown.
     public var growth: Int = PlayerRow.noGrowth
     public static let noGrowth = -999

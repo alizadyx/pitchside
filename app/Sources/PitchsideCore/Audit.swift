@@ -30,7 +30,7 @@ public enum Audit {
         out["weights"] = [Roles.keyWeight, Roles.preferableWeight, Roles.otherWeight]
         out["squad"] = squad.map { r -> [String: Any] in
             ["id": r.id, "name": r.name, "a": (r.person.a ?? []).map(Int.init), "pos": (r.person.pos ?? []).map(Int.init),
-             "rs": r.roleScores.indices.map { r.roleScores[$0] }, "best": r.bestRoleScore, "meta": r.meta, "metaRating": r.metaRating, "p": (r.person.p ?? []).map(Int.init), "ca": r.person.ca, "positions": r.positions]
+             "rs": r.roleScores.indices.map { r.roleScores[$0] }, "best": r.bestRoleScore, "meta": r.meta, "metaRating": r.metaRating, "metaRatingAll": r.metaRatingAll, "div": r.person.div ?? "", "p": (r.person.p ?? []).map(Int.init), "ca": r.person.ca, "positions": r.positions]
         }
         out["report"] = ["level": report.level, "slots": report.slots.map { ["label": $0.slot.label, "pos": $0.slot.position, "role": $0.slot.role,
             "oop": $0.slot.oop, "starter": $0.starter?.id ?? 0, "score": $0.starterScore, "backup": $0.backup?.id ?? 0, "bscore": $0.backupScore] }]

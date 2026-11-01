@@ -7,7 +7,7 @@ import Foundation
 /// anticipation and work rate; crossing, marking, agility, decisions and technique add
 /// very little. Approximate by nature, but it ranks players much closer to how they
 /// actually perform than CA does. Result is on the 1–20 scale (keepers calibrated to it), plus a
-/// 0–100 percentile among all scanned players.
+/// 0–100 percentile within the player's division.
 public enum Meta {
     static let outfield: [String: Double] = [
         "Pace": 5, "Acceleration": 5,
@@ -53,9 +53,25 @@ public enum Meta {
         return (max(0, s) * 10).rounded() / 10
     }
 
+    /// Meta % against a chosen pool of meta values (0–100: share of the pool a player is better than).
+    /// Pitchside uses the first-team players of your club's division, so Meta % says where a player
+    /// would rank in your league.
+    public static func rate(_ rows: inout [PlayerRow], against pool: [Double]) {
+        let sorted = pool.sorted()
+        guard sorted.count > 1 else { return }
+        for i in rows.indices {
+            var lo = 0, hi = sorted.count
+            while lo < hi { let mid = (lo + hi) / 2; if sorted[mid] < rows[i].meta { lo = mid + 1 } else { hi = mid } }
+            rows[i].metaRating = Int((100 * Double(lo) / Double(sorted.count)).rounded())
+        }
+    }
+
     /// Puts goalkeepers on the outfield scale (their weights give higher numbers: a keeper's 14 was
     /// worth an outfielder's 13) by matching the two distributions in the scan, then ranks everyone
-    /// 0–100. Small scans (under 30 keepers or outfielders) keep the raw keeper numbers.
+    /// 0–100 within their division (and across the whole scan). Small scans (under 30 keepers or outfielders) keep the raw keeper numbers.
+    /// Divisions with fewer scanned players than this use the whole scan for Meta %.
+    static let minDivision = 40
+
     public static func calibrate(_ rows: inout [PlayerRow], keeper: [Bool]) {
         guard keeper.count == rows.count else { return }
         let gk = rows.indices.filter { keeper[$0] && rows[$0].meta > 0 }
@@ -72,13 +88,23 @@ public enum Meta {
                 for i in gk { rows[i].meta = (max(0, mo + (rows[i].meta - mg) * so / sg) * 10).rounded() / 10 }
             }
         }
-        let sorted = rows.map(\.meta).sorted()
-        guard sorted.count > 1 else { return }
+        func percentile(_ v: Double, in sorted: [Double]) -> Int {
+            guard sorted.count > 1 else { return 50 }
+            var lo = 0, hi = sorted.count                        // players strictly below
+            while lo < hi { let mid = (lo + hi) / 2; if sorted[mid] < v { lo = mid + 1 } else { hi = mid } }
+            return Int((100 * Double(lo) / Double(sorted.count - 1)).rounded())
+        }
+        let all = rows.map(\.meta).sorted()
+        var byDivision = [String: [Double]]()
+        for r in rows { if let d = r.person.div, !d.isEmpty { byDivision[d, default: []].append(r.meta) } }
+        for k in byDivision.keys { byDivision[k]!.sort() }
         for i in rows.indices {
-            // Share of players strictly below, as 0–100.
-            var lo = 0, hi = sorted.count
-            while lo < hi { let mid = (lo + hi) / 2; if sorted[mid] < rows[i].meta { lo = mid + 1 } else { hi = mid } }
-            rows[i].metaRating = Int((100 * Double(lo) / Double(sorted.count - 1)).rounded())
+            rows[i].metaRatingAll = percentile(rows[i].meta, in: all)
+            if let d = rows[i].person.div, let list = byDivision[d], list.count >= minDivision {
+                rows[i].metaRating = percentile(rows[i].meta, in: list)
+            } else {
+                rows[i].metaRating = rows[i].metaRatingAll
+            }
         }
     }
 }

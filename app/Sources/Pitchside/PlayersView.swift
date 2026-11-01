@@ -153,7 +153,7 @@ struct PlayersTable: View {
             TableColumn("Meta", value: \.meta) { r in
                 Text(String(format: "%.1f", r.meta)).monospacedDigit().fontWeight(.semibold)
                     .foregroundStyle(AttrColor.color(Int(r.meta.rounded())))
-                    .help("Meta \(String(format: "%.1f", r.meta)): better than \(r.metaRating)% of all scanned players")
+                    .help("Meta \(String(format: "%.1f", r.meta)): better than \(r.metaRating)% of \(store.metaDivision.map { "first-team players in your division (\($0))" } ?? "players in his division"), \(r.metaRatingAll)% of everyone scanned")
             }
             .width(min: 36, ideal: 42, max: 50).customizationID("meta")
             TableColumn(roleTitle, value: \.selectedRoleScore) { r in

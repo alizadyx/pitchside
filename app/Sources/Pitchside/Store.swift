@@ -85,7 +85,7 @@ final class Store {
 
     // Squad builder
     var myClub: String = UserDefaults.standard.string(forKey: "myClub") ?? "" {
-        didSet { UserDefaults.standard.set(myClub, forKey: "myClub"); refreshSquad() }
+        didSet { UserDefaults.standard.set(myClub, forKey: "myClub"); applyMetaRatings(); refilter(); refreshSquad() }
     }
     /// Name of the preset or saved tactic last loaded (the working copy may have been edited since).
     var formationName: String = UserDefaults.standard.string(forKey: "formation") ?? "4-3-3" {
@@ -327,6 +327,7 @@ final class Store {
             await MainActor.run {
                 self.interestModel = nil
                 self.allPlayers = p
+                self.applyMetaRatings()
                 self.allStaff = s
                 self.clubs = clubs
                 self.nations = nations
@@ -614,6 +615,22 @@ final class Store {
     var isCustomFormation: Bool { customFormations.contains { $0.name == formationName } }
 
     private var teamRows: [PlayerRow] { SquadBuilder.team(allPlayers, women: squadWomen) }
+
+    /// The division Meta % compares with (your club's); nil = each player's own division.
+    private(set) var metaDivision: String?
+
+    /// Meta %: where each player would rank among the first-team players of your club's division.
+    /// Without a club (or a division too small to compare with) each player's own division is used.
+    func applyMetaRatings() {
+        let side = teamRows
+        let senior = { (r: PlayerRow) in (r.person.tage ?? 100) >= 100 }
+        let divs = side.filter { $0.person.club == myClub && senior($0) }.compactMap { $0.person.div }.filter { !$0.isEmpty }
+        let div = Dictionary(grouping: divs, by: { $0 }).max { $0.value.count < $1.value.count }?.key
+        let pool = div.map { d in side.filter { $0.person.div == d && senior($0) }.map(\.meta) } ?? []
+        guard pool.count >= 30 else { metaDivision = nil; return }
+        metaDivision = div
+        Meta.rate(&allPlayers, against: pool)
+    }
 
     static func loadJSON<T: Decodable>(_ key: String) -> T? {
         guard let d = UserDefaults.standard.data(forKey: key) else { return nil }

@@ -16,7 +16,7 @@ public class Plugin : BasePlugin
 {
     public const string Id = "local.pitchside.plugin";
     public const string Name = "Pitchside";
-    public const string Version = "0.7.3";
+    public const string Version = "0.7.4";
 
     private static int _busy;
 

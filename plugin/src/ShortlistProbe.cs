@@ -175,6 +175,50 @@ internal static partial class Dumper
                 Line(TacticProbe.Hex("   memory", mem.ReadBytes(c.start - 0x40, (int)Math.Min(0x200, c.end - c.start + 0x80))));
                 if (owner != 0 && cls != null) TacticProbe.DumpObject(mem, sb, owner, 0x200, depth: 0);
             }
+            // Vectors: a (begin, end) pointer pair on the heap that spans an id cluster is the list itself.
+            var idClusters = clusters.Where(c => !c.ptr && c.uids.Count >= 2).OrderByDescending(c => c.uids.Count).Take(8).ToList();
+            if (idClusters.Count > 0)
+            {
+                Status.Write("scanning", 0.72, "Shortlist probe: finding the lists' owners…", mode: "shortlist");
+                var spans = new ConcurrentBag<(ulong at, ulong begin, ulong end, int ci)>();
+                mem.ScanHeap((at, data, w) =>
+                {
+                    var q = MemoryMarshal.Cast<byte, ulong>(data.Slice(0, data.Length & ~7));
+                    for (int i = 0; i + 1 < q.Length; i++)
+                    {
+                        ulong b = q[i], e = q[i + 1];
+                        if (e <= b || e - b > 0x40000) continue;
+                        for (int k = 0; k < idClusters.Count; k++)
+                            if (b <= idClusters[k].start && e > idClusters[k].end && spans.Count < 500)
+                                spans.Add((at + (ulong)i * 8, b, e, k));
+                    }
+                }, p => Status.Write("scanning", 0.72 + 0.03 * p, "Shortlist probe: finding the lists' owners…", mode: "shortlist"));
+                Line();
+                Line("== Containers (begin, end) around the id lists ==");
+                foreach (var g in spans.GroupBy(x => (x.begin, x.end)).OrderBy(g => g.Key.end - g.Key.begin).Take(12))
+                {
+                    var (b, e) = g.Key;
+                    int n = (int)((e - b) / 4);
+                    var bytes = mem.ReadBytes(b, (int)Math.Min(e - b, 0x4000));
+                    if (bytes == null) continue;
+                    var parts = new List<string>();
+                    int known = 0;
+                    for (int o = 0; o + 4 <= bytes.Length; o += 4)
+                    {
+                        uint u = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(o));
+                        if (uidPerson.ContainsKey(u)) { known++; parts.Add(NameOf(u) + (targetUids.Contains(u) ? "*" : "")); }
+                        else parts.Add($"#{u}");
+                    }
+                    Line($"\n-- {n} uint32s at {b:X}–{e:X}, {known} are players");
+                    foreach (var (at, _, _, _) in g.Take(4))
+                    {
+                        var (owner, cls) = TacticProbe.Owner(mem, at, 0x4000);
+                        Line($"   held by {cls ?? "(no class)"}{(owner != 0 ? $" @ {owner:X}, field +0x{at - owner:X}" : $" @ {at:X}")}; capacity field {mem.U64(at + 16):X}");
+                    }
+                    Line("   " + string.Join(", ", parts.Take(300)));
+                }
+                if (spans.IsEmpty) Line("  (none found)");
+            }
             // Who points at the start of each list (the vector's owner)?
             if (listStarts.Count > 0)
             {

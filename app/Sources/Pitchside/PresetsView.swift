@@ -79,7 +79,7 @@ struct PresetsPane: View {
                         Text("Roles").frame(minWidth: 30, alignment: .trailing)
                             .help("XI level (1–20): average score of the best eleven in this preset's roles")
                         Text("Style").frame(minWidth: 30, alignment: .trailing)
-                            .help("Style fit: how far the attributes this style asks for are above (+) or below (−) your players' own usual level. 0 = neutral.")
+                            .help("Style fit: + this style leans on your players' strengths more than your average preset does, − less. 0 = average for your squad.")
                         Image(systemName: "crown.fill").foregroundStyle(.clear)
                     }
                 }
@@ -118,7 +118,7 @@ struct PresetsPane: View {
                 Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
                 Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
                 Stat(title: "Style fit", value: String(format: "%+.1f", pf.styleScore), color: leanColor(pf.styleScore))
-                    .help("How far the attributes this style asks for are above (+) or below (−) these players' own usual level. 0 = neutral. Quality is in the role scores.")
+                    .help("+ this style leans on your players' strengths more than your average preset does, − less. 0 = average for your squad. Quality is in the role scores.")
                 if let m = FMPresets.style(pf.preset.style)?.mentality {
                     Stat(title: "Mentality", value: m, color: .secondary)
                 }
@@ -203,7 +203,7 @@ struct PresetsPane: View {
                     .help("These attributes compared with each player's own average, across the \(d.group.lowercased()) in the XI")
                 }
             }
-            Text("Each instruction that isn't Standard asks something of some players. + means those attributes are above the players' usual level, − below; heavier instructions count more.")
+            Text("Each instruction that isn't Standard asks something of some players. + means those attributes are above what the players are usually asked for in their position, − below; heavier instructions count more. The style fit at the top is this, compared with your average preset.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .fmCard()

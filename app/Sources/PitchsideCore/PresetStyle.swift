@@ -2,8 +2,8 @@ import Foundation
 
 /// How well an XI's attribute profile suits a tactical style: each non-neutral team instruction asks
 /// something of some players (a high press needs running, a high line needs quick defenders, short
-/// passing needs touch and composure…). Each player is measured against his own average, so this is
-/// about what the squad leans towards, not how good it is (the role scores cover that).
+/// passing needs touch and composure…). Each player is measured against his own level in what his
+/// position is usually asked for, so this is about what the squad leans towards, not how good it is (the role scores cover that).
 /// 0 = neutral, +2 = those attributes are two points above the players' usual level.
 public enum PresetStyle {
     public struct Demand: Sendable, Identifiable {
@@ -134,13 +134,20 @@ public enum PresetStyle {
 
     static func strength(_ value: String) -> Double { value.hasPrefix("Much") ? 1.5 : 1 }
 
-    static let goalkeeping: Set<String> = ["Handling", "AerialReach", "CommandOfArea", "Communication", "Kicking", "Throwing",
-                                           "OneOnOnes", "Reflexes", "RushingOut", "Punching", "Eccentricity"]
-    static let notAbility: Set<String> = ["LeftFoot", "RightFoot"]
+    /// Everything any style asks of a player in this position. A player's baseline is his average over
+    /// these, so a style scores + only when it asks for more of his strengths than the styles do on
+    /// average, and − when it leans on his weaker sides. (Comparing with all attributes made every style
+    /// look good: a centre-back's heading is always above his finishing.)
+    static func relevant(to position: String) -> [String] {
+        var seen = Set<String>(), out: [String] = []
+        for rule in rules where rule.group.contains(position) {
+            for (a, _) in rule.attrs where seen.insert(a).inserted { out.append(a) }
+        }
+        return out
+    }
 
-    /// A player's usual attribute level: outfield attributes for outfielders, everything but feet for keepers.
-    static func baseline(_ r: PlayerRow, keeper: Bool, meta: ExportMeta, reader R: TacticsAdvisor.Reader) -> Double {
-        let keys = meta.playerAttrKeys.filter { !notAbility.contains($0) && (keeper || !goalkeeping.contains($0)) }
+    static func baseline(_ r: PlayerRow, position: String, reader R: TacticsAdvisor.Reader) -> Double {
+        let keys = relevant(to: position)
         guard !keys.isEmpty else { return 10 }
         return keys.reduce(0) { $0 + R.attr(r, $1) } / Double(keys.count)
     }
@@ -149,7 +156,7 @@ public enum PresetStyle {
     public static func evaluate(_ style: FMStyle, xi: [(PlayerRow, String)], meta: ExportMeta) -> Result {
         let R = TacticsAdvisor.Reader(meta)
         var base = [UInt32: Double]()
-        for (r, pos) in xi { base[r.id] = baseline(r, keeper: pos == "GK", meta: meta, reader: R) }
+        for (r, pos) in xi { base[r.id] = baseline(r, position: pos, reader: R) }
         var demands: [Demand] = []
         var seen = Set<String>()
         for row in style.instructions {

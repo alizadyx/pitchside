@@ -104,8 +104,11 @@ extension TacticsAdvisor {
         public let oopFamiliarity: [UInt8]
         /// How the XI suits the style's team instructions (separate from the role scores).
         public let style: PresetStyle.Result?
+        /// Your squad's average style fit over all presets: style fit is shown relative to it.
+        public var styleOffset: Double = 0
         public var rating: Double { fit.rating }
-        public var styleScore: Double { style?.score ?? 0 }
+        /// + this style suits your players' strengths better than your average style, − worse.
+        public var styleScore: Double { (style?.score ?? 0) - styleOffset }
         /// XI level nudged by the squad's lean: half a level per point of style fit.
         public var combined: Double { fit.level + 0.5 * styleScore }
     }
@@ -168,6 +171,10 @@ extension TacticsAdvisor {
 
     /// Every FM preset fitted to the squad, best first.
     public static func rankPresets(squad: [PlayerRow], meta: ExportMeta, presets: [FMPreset] = FMPresets.all) -> [PresetFit] {
-        presets.map { fit($0, squad: squad, meta: meta) }.sorted { $0.rating > $1.rating }
+        var fits = presets.map { fit($0, squad: squad, meta: meta) }
+        let raw = fits.compactMap { $0.style?.score }
+        let mean = raw.isEmpty ? 0 : raw.reduce(0, +) / Double(raw.count)
+        for i in fits.indices { fits[i].styleOffset = mean }
+        return fits.sorted { $0.rating > $1.rating }
     }
 }

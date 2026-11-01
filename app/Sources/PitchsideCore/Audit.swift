@@ -15,7 +15,8 @@ public enum Audit {
         let teams = SquadBuilder.teams(club: club, rows: side)
         var rows = side
         if let first = teams.first { rows = side.filter { $0.person.club != club } + SquadBuilder.members(of: first, club: club, rows: side) }
-        guard let report = SquadBuilder.analyse(club: club, formation: Formations.all[0], rows: rows, meta: meta, season: 2026) else {
+        let report = SquadBuilder.analyse(club: club, formation: Formations.all[0], rows: rows, meta: meta, season: 2026)
+        guard !report.squad.isEmpty else {
             throw NSError(domain: "Audit", code: 1, userInfo: [NSLocalizedDescriptionKey: "No players found for \(club)"])
         }
         let squad = report.squad
@@ -57,7 +58,7 @@ public enum Audit {
         let ins = TacticsAdvisor.instructions(best, meta: meta, stance: .even)
         out["instructions"] = ["mentality": ins.mentality, "items": ins.items.map { "\($0.name): \($0.setting)" }]
         let depth = SquadBuilder.depthChart(report, meta: meta)
-        out["depth"] = depth.map { ["slot": $0.slot.label, "n": $0.options.count] }
+        out["depth"] = depth.joined().map { ["slot": $0.slot.label, "n": $0.options.count] }
         let data = try JSONSerialization.data(withJSONObject: out, options: [.sortedKeys])
         try data.write(to: URL(fileURLWithPath: outPath))
         return squad.count

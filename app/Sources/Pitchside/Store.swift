@@ -255,6 +255,12 @@ final class Store {
     private(set) var upgrades: [SquadBuilder.Upgrade] = []
     private(set) var upgradesBusy = false
     var suggestions: [SquadBuilder.Suggestion] = []
+    /// How many signings matched in all (the table shows up to `signLimit`).
+    private(set) var suggestionsTotal = 0
+    /// Most signings to list (0 = all). More is slower to sort.
+    var signLimit: Int = UserDefaults.standard.object(forKey: "signLimit") as? Int ?? 200 {
+        didSet { UserDefaults.standard.set(signLimit, forKey: "signLimit"); refreshSuggestions() }
+    }
     var clubs: [String] = []
     var nations: [String] = []
     var divisions: [String] = []
@@ -1024,11 +1030,11 @@ final class Store {
             // Your FM shortlist: everyone on it, ranked for this position, nothing filtered out.
             var c = SigningCriteria(); c.everyone = true; c.forDepth = signForDepth
             let pool = teamRows.filter { fmShortlist.contains($0.id) }
-            list = SquadBuilder.suggestions(for: slot, report: report, rows: pool, meta: meta,
-                                            criteria: c, interest: interestModel, season: season, limit: pool.count, style: targetStyle)
+            (list, suggestionsTotal) = SquadBuilder.suggestionsAndTotal(for: slot, report: report, rows: pool, meta: meta,
+                                            criteria: c, interest: interestModel, season: season, limit: 0, style: targetStyle)
         } else {
-            list = SquadBuilder.suggestions(for: slot, report: report, rows: teamRows, meta: meta,
-                                            criteria: signingCriteria(), interest: interestModel, season: season, limit: 200,
+            (list, suggestionsTotal) = SquadBuilder.suggestionsAndTotal(for: slot, report: report, rows: teamRows, meta: meta,
+                                            criteria: signingCriteria(), interest: interestModel, season: season, limit: signLimit,
                                             style: targetStyle)
         }
         let cols = columns(for: "signings")

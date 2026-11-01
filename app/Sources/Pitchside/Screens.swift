@@ -174,6 +174,11 @@ struct SquadView: View {
                     }
                     .pickerStyle(.segmented).fixedSize()
                     .help("FM shortlist: rank every player you imported from FM's shortlist (Shortlist → Import from FM) for the chosen position, with no filters. Players out of position are scored lower, not left out.")
+                    HStack(spacing: 6) {
+                        Text("Show up to")
+                        NumberField(value: $store.signLimit, width: 56, zeroIsAny: true)
+                    }
+                    .help("Most signings to list, best first (empty or 0: all of them; thousands can be slow to sort)")
                     Picker("Willing to join", selection: $store.minInterest) {
                         Text("Anyone").tag(0)
                         Text("Doubtful or better").tag(1)
@@ -365,7 +370,11 @@ struct SquadView: View {
                     Text("Click a position on the pitch").foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(store.suggestions.count) found").foregroundStyle(.secondary)
+                Text(store.suggestions.count < store.suggestionsTotal
+                     ? "\(store.suggestions.count) of \(store.suggestionsTotal.formatted()) shown"
+                     : "\(store.suggestionsTotal.formatted()) found").foregroundStyle(.secondary)
+                    .help(store.suggestions.count < store.suggestionsTotal
+                          ? "The best \(store.suggestions.count) of everyone who matches. Change Show up to, or narrow the filters." : "")
                 ColumnsMenu(table: "signings")
             }
             .padding(10)

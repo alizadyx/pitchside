@@ -448,8 +448,16 @@ public enum SquadBuilder {
     public static func suggestions(for a: SlotAnalysis, report: SquadReport, rows: [PlayerRow], meta: ExportMeta,
                                    criteria c: SigningCriteria, interest model: InterestModel? = nil, season: Int = 0,
                                    limit: Int = 40, style: FMStyle? = nil) -> [Suggestion] {
+        suggestionsAndTotal(for: a, report: report, rows: rows, meta: meta, criteria: c, interest: model, season: season,
+                            limit: limit, style: style).list
+    }
+
+    /// The best `limit` signings (0 = all), and how many matched in total.
+    public static func suggestionsAndTotal(for a: SlotAnalysis, report: SquadReport, rows: [PlayerRow], meta: ExportMeta,
+                                           criteria c: SigningCriteria, interest model: InterestModel? = nil, season: Int = 0,
+                                           limit: Int = 40, style: FMStyle? = nil) -> (list: [Suggestion], total: Int) {
         let ri = roleIndex(a.slot.role), oi = roleIndex(a.slot.oop)
-        guard ri != nil || oi != nil else { return [] }
+        guard ri != nil || oi != nil else { return ([], 0) }
         let posIdx = meta.positionKeys.firstIndex(of: a.slot.position)
         let posIndex = Dictionary(uniqueKeysWithValues: meta.positionKeys.enumerated().map { ($1, $0) })
         let reader = style.map { _ in TacticsAdvisor.Reader(meta) }
@@ -484,7 +492,7 @@ public enum SquadBuilder {
             if x.row.age != y.row.age { return x.row.age < y.row.age }
             return (x.row.person.val ?? Int.max) < (y.row.person.val ?? Int.max)
         }
-        return Array(out.prefix(limit))
+        return (limit > 0 ? Array(out.prefix(limit)) : out, out.count)
     }
 
     // MARK: My tactic helpers

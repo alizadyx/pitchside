@@ -96,7 +96,7 @@ public enum PresetStyle {
              attrs: [("Positioning", 2), ("Marking", 1.5), ("Concentration", 1.5), ("Heading", 1), ("Strength", 1)], weight: 1.2),
         Rule(phase: "OOP", setting: "Defensive Line", values: ["Higher"], group: .def,
              attrs: [("Pace", 2), ("Acceleration", 1.5), ("Anticipation", 1.5), ("Positioning", 1)], weight: 1),
-        Rule(phase: "OOP", setting: "Defensive Line", values: ["Deeper"], group: .cb,
+        Rule(phase: "OOP", setting: "Defensive Line", values: ["Deeper", "Lower"], group: .cb,
              attrs: [("Heading", 1.5), ("JumpingReach", 1.5), ("Positioning", 1.5), ("Strength", 1), ("Marking", 1)], weight: 1),
         Rule(phase: "OOP", setting: "Defensive Line Behaviour", values: ["Step Up"], group: .def,
              attrs: [("Anticipation", 1.5), ("Concentration", 1), ("Teamwork", 1), ("Decisions", 1)], weight: 0.6),

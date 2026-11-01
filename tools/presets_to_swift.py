@@ -12,7 +12,7 @@ IP = {"GK": "GK", "BGK": "BPGK", "NGK": "NNGK", "CB": "CB", "BCB": "BPCB", "ACB"
       "WCM": "WCM", "MPM": "MP", "CHM": "CHM", "AP": "AP", "AM": "AM", "FR": "FR", "SS": "SS",
       "WM": "WM", "W": "W", "IW": "IW", "PW": "PW", "IF": "IF", "WFD": "WF", "CFD": "CF", "TF": "TF",
       "TGF": "TF", "P": "P", "PCH": "P", "CHF": "CHF", "DLF": "DLF", "F9": "F9", "FN": "F9"}
-OOP = {"GK": "oGK", "SK": "oSK", "LK": "oLK", "CB": "oCB", "SCB": "oSCB", "CCB": "oCCB", "WCB": "oWCB",
+OOP = {"GK": "oGK", "SK": "oSK", "LK": "oLK", "LHK": "oLK", "CB": "oCB", "SCB": "oSCB", "CCB": "oCCB", "WCB": "oWCB",
        "SWD": "oSWCB", "SWC": "oSWCB", "CWD": "oCWCB", "CWC": "oCWCB", "FB": "oFB", "PFB": "oPFB",
        "HFB": "oHFB", "WB": "oWB", "PWB": "oPWB", "HWB": "oHWB", "DM": "oDM", "DDM": "oDDM",
        "PDM": "oPDM", "SDM": "oSDM", "WDM": "oWCDM", "CM": "oCM", "PCM": "oPCM", "SCM": "oSCM",

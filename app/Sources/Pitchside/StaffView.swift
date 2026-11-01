@@ -4,7 +4,7 @@ import SwiftUI
 struct StaffView: View {
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.staff") private var columnLayout: TableColumnCustomization<StaffRow>
+    @SceneStorage("table.staff.v2") private var columnLayout: TableColumnCustomization<StaffRow>
     @State private var selection: UInt32?
     @AppStorage("showStaffFilters") private var showFilters = true
     @AppStorage("staffMode") private var mode = 0     // 0 search, 1 recommendations for my club
@@ -86,11 +86,11 @@ struct StaffView: View {
                     }
                     Table(store.staff, selection: $selection, sortOrder: $store.staffSort, columnCustomization: $columnLayout) {
                         TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
-                            .width(min: 130, ideal: 190).customizationID("name")
+                            .width(min: 130, ideal: ColumnFit.width(store.staff.prefix(600).map(\.name), min: 130, max: 300, medium: true)).customizationID("name")
                         TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 42).customizationID("age")
                         TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }.width(min: 80, ideal: 140, max: 220).customizationID("job")
                         TableColumn("Club", value: \.club) { r in Text(r.club).lineLimit(1).foregroundStyle(.secondary) }
-                            .width(min: 90, ideal: 150, max: 260).customizationID("club")
+                            .width(min: 90, ideal: ColumnFit.width(store.staff.prefix(600).map(\.club), min: 90, max: 260), max: 260).customizationID("club")
                         TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
                         TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                         TableColumn(AttributeGroups.label(store.staffColumnKey), value: \.selectedAttr) { r in

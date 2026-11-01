@@ -118,7 +118,7 @@ struct PlayersTable: View {
     @Binding var selection: UInt32?
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.players") private var columnLayout: TableColumnCustomization<PlayerRow>
+    @SceneStorage("table.players.v2") private var columnLayout: TableColumnCustomization<PlayerRow>
 
     var body: some View {
         @Bindable var store = store
@@ -145,13 +145,13 @@ struct PlayersTable: View {
                     }
                 }
             }
-            .width(min: 140, ideal: 200).customizationID("name")
+            .width(min: 140, ideal: ColumnFit.width(store.players.prefix(600).map(\.name), min: 140, max: 320, extra: 40, medium: true)).customizationID("name")
             TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }
                 .width(min: 30, ideal: 34, max: 40).customizationID("age")
             TableColumn("Position", value: \.positions) { r in
                 Text(r.positions).foregroundStyle(.secondary).lineLimit(1)
             }
-            .width(min: 60, ideal: 110, max: 180).customizationID("position")
+            .width(min: 60, ideal: ColumnFit.width(store.players.prefix(600).map(\.positions), min: 60, max: 180), max: 180).customizationID("position")
             TableColumn("Club", value: \.club) { r in
                 HStack(spacing: 4) {
                     Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1)
@@ -162,7 +162,7 @@ struct PlayersTable: View {
                     }
                 }
             }
-            .width(min: 90, ideal: 160, max: 260).customizationID("club")
+            .width(min: 90, ideal: ColumnFit.width(store.players.prefix(600).map(\.club), min: 90, max: 260, extra: 30), max: 260).customizationID("club")
             TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }
                 .width(min: 32, ideal: 38, max: 44).customizationID("ca")
             TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }

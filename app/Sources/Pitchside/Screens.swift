@@ -37,7 +37,7 @@ extension View {
 struct SquadView: View {
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.signings") private var columnLayout: TableColumnCustomization<SquadBuilder.Suggestion>
+    @SceneStorage("table.signings.v2") private var columnLayout: TableColumnCustomization<SquadBuilder.Suggestion>
     @State private var clubQuery = ""
     @State private var picked: UInt32?
     @State private var showSave = false
@@ -388,16 +388,16 @@ struct SquadView: View {
                         }
                     }
                 }
-                .width(min: 150, ideal: 200).customizationID("name")
+                .width(min: 150, ideal: ColumnFit.width(store.suggestions.map(\.row.name), min: 150, max: 320, extra: store.planningTarget ? 100 : 44, medium: true)).customizationID("name")
                 TableColumn("Age", value: \.age) { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                 TableColumn("Nat", value: \.nat) { s in Text(s.nat).lineLimit(1).foregroundStyle(.secondary).help(s.nat) }
-                    .width(min: 50, ideal: 90, max: 140).customizationID("nat")
+                    .width(min: 50, ideal: ColumnFit.width(store.suggestions.map(\.nat), min: 50, max: 140), max: 140).customizationID("nat")
                 TableColumn("Club", value: \.club) { s in
                     Text(s.row.club.isEmpty ? "Free agent" : s.row.club + (s.row.person.own.map { " (loan from \($0))" } ?? ""))
                         .lineLimit(1).foregroundStyle(.secondary)
                         .help(s.row.person.own.map { "On loan at \(s.row.club); you'd buy him from \($0)" } ?? s.row.club)
                 }
-                .width(min: 90, ideal: 140, max: 240).customizationID("club")
+                .width(min: 90, ideal: ColumnFit.width(store.suggestions.map { $0.row.club.isEmpty ? "Free agent" : $0.row.club }, min: 90, max: 240), max: 240).customizationID("club")
                 TableColumn("Role", value: \.score) { s in
                     Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(store.scoreColor(s.score))
                 }
@@ -522,7 +522,7 @@ struct MySquadView: View {
     @Binding var picked: UInt32?
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.squad") private var columnLayout: TableColumnCustomization<PlayerRow>
+    @SceneStorage("table.squad.v2") private var columnLayout: TableColumnCustomization<PlayerRow>
 
     var body: some View {
         @Bindable var store = store
@@ -556,7 +556,7 @@ struct MySquadView: View {
                         }
                     }
                 }
-                    .width(min: 130, ideal: 190).customizationID("name")
+                    .width(min: 130, ideal: ColumnFit.width(store.squadRows.map(\.name), min: 130, max: 300, extra: 60, medium: true)).customizationID("name")
                 TableColumn("XI", value: \PlayerRow[extra: "xi"]) { r in
                     let t = store.squadRoleText[r.id]
                     Text(t ?? "—").lineLimit(1)
@@ -570,7 +570,7 @@ struct MySquadView: View {
                 TableColumn("Position", value: \.positions) { r in
                     Text(r.positions).foregroundStyle(.secondary).lineLimit(1)
                 }
-                .width(min: 60, ideal: 110, max: 180).customizationID("position")
+                .width(min: 60, ideal: ColumnFit.width(store.squadRows.map(\.positions), min: 60, max: 180), max: 180).customizationID("position")
                 TableColumn("Best role", value: \.bestRoleScore) { r in
                     HStack(spacing: 4) {
                         Text(Roles.role(r.bestRole)?.short ?? r.bestRole).foregroundStyle(.secondary).lineLimit(1)
@@ -848,7 +848,7 @@ struct SlotCard: View {
 struct RadarView: View {
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.growth") private var columnLayout: TableColumnCustomization<PlayerRow>
+    @SceneStorage("table.growth.v2") private var columnLayout: TableColumnCustomization<PlayerRow>
     @State private var mode = 0
     @State private var picked: UInt32?
 
@@ -905,12 +905,12 @@ struct RadarView: View {
                         .buttonStyle(.plain)
                     }
                     .width(20).customizationID("star")
-                    TableColumn("Name") { r in Text(r.name).fontWeight(.medium).lineLimit(1) }.width(min: 140, ideal: 190).customizationID("name")
+                    TableColumn("Name") { r in Text(r.name).fontWeight(.medium).lineLimit(1) }.width(min: 140, ideal: ColumnFit.width(rows.map(\.name), min: 140, max: 300, medium: true)).customizationID("name")
                     TableColumn("Age") { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                     TableColumn("Position") { r in Text(r.positions).foregroundStyle(.secondary).lineLimit(1) }
-                        .width(min: 60, ideal: 100, max: 160).customizationID("position")
+                        .width(min: 60, ideal: ColumnFit.width(rows.map(\.positions), min: 60, max: 160), max: 160).customizationID("position")
                     TableColumn("Club") { r in Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1) }
-                        .width(min: 90, ideal: 150, max: 240).customizationID("club")
+                        .width(min: 90, ideal: ColumnFit.width(rows.map { $0.club.isEmpty ? "Free agent" : $0.club }, min: 90, max: 240), max: 240).customizationID("club")
                     TableColumn("CA") { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
                     TableColumn("PA") { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                     TableColumn("Growth") { r in

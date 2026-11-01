@@ -1,3 +1,4 @@
+import AppKit
 import PitchsideCore
 import SwiftUI
 
@@ -280,5 +281,18 @@ enum RoleText {
         let ip = Roles.role(slot.role)?.name ?? slot.role
         guard let oop = Roles.role(slot.oop)?.name else { return ip }
         return oop == ip ? "\(ip) (in and out of possession)" : "\(ip) · \(oop) (OOP)"
+    }
+}
+
+
+/// Column widths that fit their content when a table first opens (until you drag one: then yours is kept).
+enum ColumnFit {
+    static func width(_ strings: [String], min lo: CGFloat, max hi: CGFloat, extra: CGFloat = 22, medium: Bool = false) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: medium ? .medium : .regular)
+        var w: CGFloat = 0
+        for s in strings.prefix(600) where !s.isEmpty {
+            w = Swift.max(w, (s as NSString).size(withAttributes: [.font: font]).width)
+        }
+        return Swift.min(hi, Swift.max(lo, (w + extra).rounded()))
     }
 }

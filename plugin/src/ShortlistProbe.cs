@@ -194,7 +194,8 @@ internal static partial class Dumper
             }
             // Id lists: walk out over anything that looks like a person id (known player, or in FM's id ranges),
             // then find whatever points at (or just before) the first entry.
-            bool LooksId(uint u) => u != 0 && (uidPerson.ContainsKey(u) || u < 0x0400_0000u || (u >= 0x7700_0000u && u < 0x7800_0000u));
+            // FM person ids: below ~0x1000_0000 (database) or 0x77xx_xxxx (generated players).
+            bool LooksId(uint u) => u != 0 && (uidPerson.ContainsKey(u) || u < 0x1000_0000u || (u >= 0x7700_0000u && u < 0x7800_0000u));
             var arrays = new List<(ulong begin, ulong end)>();
             foreach (var c in clusters.Where(c => !c.ptr && c.start >= GameHeap && c.uids.Count >= 2))
             {
@@ -229,7 +230,10 @@ internal static partial class Dumper
                 }, p => Status.Write("scanning", 0.7 + 0.05 * p, "Shortlist probe: finding what points at the list…", mode: "shortlist"));
                 Line();
                 Line("== Pointers to (or near) each id list ==");
-                foreach (var (at, v, k) in near.Distinct().OrderBy(x => x.k).ThenBy(x => x.v).Take(60))
+                // The longest list first: that's the shortlist; tiny ones are other game data.
+                var order = Enumerable.Range(0, arrays.Count).OrderByDescending(k => arrays[k].end - arrays[k].begin).ToList();
+                foreach (var (at, v, k) in near.Distinct().GroupBy(x => x.k).OrderBy(g => order.IndexOf(g.Key))
+                             .SelectMany(g => g.OrderBy(x => Math.Abs((long)x.v - (long)arrays[x.k].begin)).Take(15)))
                 {
                     var (owner, cls) = TacticProbe.Owner(mem, at, 0x4000);
                     long rel = (long)v - (long)arrays[k].begin;

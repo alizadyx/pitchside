@@ -112,13 +112,29 @@ internal static partial class Dumper
         {
             // Every place holding a named player: as a pointer (8-byte aligned) or as an id (4-byte aligned).
             var targetAddrs = addrUid.Where(kv => targetUids.Contains(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value);
+            // Any pointer into a named player's object (FM objects have several sub-objects, each its own address).
+            var starts = addrUid.Where(kv => targetUids.Contains(kv.Value)).GroupBy(kv => kv.Value)
+                .Select(g => (lo: g.Min(x => x.Key), uid: g.Key)).ToList();
+            uint Inside(ulong v)
+            {
+                foreach (var (lo, uid) in starts) if (v >= lo && v < lo + 0x600) return uid;
+                return 0;
+            }
+            // The plugin's own memory (copies of game data) sits below this; only the game's heap counts.
+            const ulong GameHeap = 0x60_0000_0000UL;
             var hits = new ConcurrentBag<(ulong at, uint uid, bool ptr)>();
             Status.Write("scanning", 0.4, "Shortlist probe 2/3: looking for lists of your players…", mode: "shortlist");
             mem.ScanHeap((at, data, w) =>
             {
                 var q = MemoryMarshal.Cast<byte, ulong>(data.Slice(0, data.Length & ~7));
+                if (at < GameHeap) return;
                 for (int i = 0; i < q.Length; i++)
-                    if (targetAddrs.TryGetValue(q[i], out var u) && hits.Count < 200_000) hits.Add((at + (ulong)i * 8, u, true));
+                {
+                    ulong v = q[i];
+                    if (v < GameHeap || hits.Count >= 200_000) continue;
+                    uint u = targetAddrs.TryGetValue(v, out var x) ? x : Inside(v);
+                    if (u != 0) hits.Add((at + (ulong)i * 8, u, true));
+                }
                 var d = MemoryMarshal.Cast<byte, uint>(data.Slice(0, data.Length & ~3));
                 for (int i = 0; i < d.Length; i++)
                     if (targetUids.Contains(d[i]) && hits.Count < 200_000) hits.Add((at + (ulong)i * 4, d[i], false));
@@ -156,7 +172,7 @@ internal static partial class Dumper
                     ulong a0 = c.start;
                     bool IsEntry(ulong a)
                     {
-                        if (c.ptr) return addrUid.ContainsKey(mem.U64(a));
+                        if (c.ptr) { ulong v = mem.U64(a); return addrUid.ContainsKey(v) || Inside(v) != 0; }
                         var b = mem.ReadBytes(a, 4);
                         return b != null && uidPerson.ContainsKey(BinaryPrimitives.ReadUInt32LittleEndian(b));
                     }
@@ -165,7 +181,8 @@ internal static partial class Dumper
                     var list = new List<string>();
                     for (ulong a = a0; IsEntry(a) && list.Count < 400; a += (ulong)stride)
                     {
-                        uint u = c.ptr ? addrUid[mem.U64(a)] : BinaryPrimitives.ReadUInt32LittleEndian(mem.ReadBytes(a, 4));
+                        ulong pv = c.ptr ? mem.U64(a) : 0;
+                        uint u = c.ptr ? (addrUid.TryGetValue(pv, out var uu) ? uu : Inside(pv)) : BinaryPrimitives.ReadUInt32LittleEndian(mem.ReadBytes(a, 4));
                         list.Add(NameOf(u) + (targetUids.Contains(u) ? "*" : ""));
                     }
                     if (list.Count < 2) continue;
@@ -176,7 +193,7 @@ internal static partial class Dumper
                 if (owner != 0 && cls != null) TacticProbe.DumpObject(mem, sb, owner, 0x200, depth: 0);
             }
             // Vectors: a (begin, end) pointer pair on the heap that spans an id cluster is the list itself.
-            var idClusters = clusters.Where(c => !c.ptr && c.uids.Count >= 2).OrderByDescending(c => c.uids.Count).Take(8).ToList();
+            var idClusters = clusters.Where(c => c.uids.Count >= 2).OrderByDescending(c => c.uids.Count).Take(8).ToList();
             if (idClusters.Count > 0)
             {
                 Status.Write("scanning", 0.72, "Shortlist probe: finding the lists' owners…", mode: "shortlist");
@@ -187,7 +204,7 @@ internal static partial class Dumper
                     for (int i = 0; i + 1 < q.Length; i++)
                     {
                         ulong b = q[i], e = q[i + 1];
-                        if (e <= b || e - b > 0x40000) continue;
+                        if (e <= b || e - b > 0x40000 || b < GameHeap) continue;
                         for (int k = 0; k < idClusters.Count; k++)
                             if (b <= idClusters[k].start && e > idClusters[k].end && spans.Count < 500)
                                 spans.Add((at + (ulong)i * 8, b, e, k));
@@ -209,7 +226,17 @@ internal static partial class Dumper
                         if (uidPerson.ContainsKey(u)) { known++; parts.Add(NameOf(u) + (targetUids.Contains(u) ? "*" : "")); }
                         else parts.Add($"#{u}");
                     }
-                    Line($"\n-- {n} uint32s at {b:X}–{e:X}, {known} are players");
+                    // Or 8-byte pointers to players.
+                    var pparts = new List<string>();
+                    int pknown = 0;
+                    for (int o = 0; o + 8 <= bytes.Length; o += 8)
+                    {
+                        ulong v = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(o));
+                        uint u = addrUid.TryGetValue(v, out var uu) ? uu : Inside(v);
+                        if (u != 0) { pknown++; pparts.Add(NameOf(u) + (targetUids.Contains(u) ? "*" : "")); } else pparts.Add($"@{v:X}");
+                    }
+                    if (pknown > known) { parts = pparts; known = pknown; n = pparts.Count; }
+                    Line($"\n-- {n} entries at {b:X}–{e:X}, {known} are players");
                     foreach (var (at, _, _, _) in g.Take(4))
                     {
                         var (owner, cls) = TacticProbe.Owner(mem, at, 0x4000);

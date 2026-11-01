@@ -645,7 +645,26 @@ final class Store {
 
     // MARK: - Squad builder
 
-    var formation: Formation { workingFormation }
+    var formation: Formation { planningTarget ? targetPreset!.formation : workingFormation }
+
+    // MARK: Target tactic (the FM preset you're building towards)
+
+    var targetPresetId: String = UserDefaults.standard.string(forKey: "targetPreset") ?? "" {
+        didSet { UserDefaults.standard.set(targetPresetId, forKey: "targetPreset"); refreshSquad() }
+    }
+    var targetPreset: FMPreset? { FMPresets.all.first { $0.id == targetPresetId } }
+    /// My tactic screen plans for the target preset (positions, roles, signings) instead of your tactic.
+    var planForTarget: Bool = UserDefaults.standard.bool(forKey: "planForTarget") {
+        didSet { UserDefaults.standard.set(planForTarget, forKey: "planForTarget"); refreshSquad() }
+    }
+    var planningTarget: Bool { planForTarget && targetPreset != nil }
+    /// How your squad fits the target: best XI in its roles, and its style fit.
+    private(set) var targetFit: TacticsAdvisor.PresetFit?
+
+    func buildTowards(_ preset: FMPreset) {
+        targetPresetId = preset.id
+        planForTarget = true
+    }
     var allFormations: [Formation] { Formations.presets + [Formations.blank] + customFormations }
     var isCustomFormation: Bool { customFormations.contains { $0.name == formationName } }
 
@@ -701,6 +720,7 @@ final class Store {
     func resetFormation() { loadFormation(formationName) }
 
     private func edit(_ f: Formation, select index: Int?) {
+        guard !planningTarget else { return }   // the target preset isn't edited here
         formationEdited = true
         workingFormation = f
         if let index, f.slots.indices.contains(index) { selectedSlot = f.slots[index].label }
@@ -713,6 +733,7 @@ final class Store {
     }
 
     func setSlotRole(_ index: Int, _ role: String) {
+        guard !planningTarget else { return }   // the target preset isn't edited here
         var f = workingFormation
         guard f.slots.indices.contains(index) else { return }
         f.slots[index].role = role
@@ -720,6 +741,7 @@ final class Store {
     }
 
     func setSlotOOP(_ index: Int, _ role: String) {
+        guard !planningTarget else { return }   // the target preset isn't edited here
         var f = workingFormation
         guard f.slots.indices.contains(index) else { return }
         f.slots[index].oop = role
@@ -794,11 +816,13 @@ final class Store {
     }
 
     func addSlot(_ position: String) {
+        guard !planningTarget else { return }   // the target preset isn't edited here
         let (f, i) = Formations.adding(position, to: workingFormation)
         edit(f, select: i)
     }
 
     func removeSlot(_ index: Int) {
+        guard !planningTarget else { return }   // the target preset isn't edited here
         var f = workingFormation
         guard f.slots.indices.contains(index), f.slots.count > 1 else { return }
         f.slots.remove(at: index)
@@ -852,9 +876,10 @@ final class Store {
 
     func refreshTactics() {
         guard let meta, let report = squadReport else {
-            tacticsFits = []; presetFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; return
+            tacticsFits = []; presetFits = []; targetFit = nil; tacticsSetPieces = nil; tacticsInstructions = nil; return
         }
         presetFits = TacticsAdvisor.rankPresets(squad: report.squad, meta: meta)
+        targetFit = targetPreset.flatMap { t in presetFits.first { $0.id == t.id } }
         let shapes = Formations.presets + customFormations.filter { c in !Formations.presets.contains { $0.name == c.name } }
         tacticsFits = TacticsAdvisor.rankFormations(shapes, squad: report.squad, meta: meta)
         myTacticFit = TacticsAdvisor.fit(workingFormation, squad: report.squad, meta: meta, keepRoles: true)
@@ -987,6 +1012,9 @@ final class Store {
         didSet { UserDefaults.standard.set(staffRealistic, forKey: "staffRealistic"); refreshStaffAdvice() }
     }
 
+    /// The target preset's style, when planning for it: signings are also ranked by how they suit it.
+    private var targetStyle: FMStyle? { planningTarget ? targetPreset.flatMap { FMPresets.style($0.style) } : nil }
+
     func refreshSuggestions() {
         guard let meta, let report = squadReport,
               let slot = report.slots.first(where: { $0.slot.label == selectedSlot }) else { suggestions = []; return }
@@ -997,10 +1025,11 @@ final class Store {
             var c = SigningCriteria(); c.everyone = true; c.forDepth = signForDepth
             let pool = teamRows.filter { fmShortlist.contains($0.id) }
             list = SquadBuilder.suggestions(for: slot, report: report, rows: pool, meta: meta,
-                                            criteria: c, interest: interestModel, season: season, limit: pool.count)
+                                            criteria: c, interest: interestModel, season: season, limit: pool.count, style: targetStyle)
         } else {
             list = SquadBuilder.suggestions(for: slot, report: report, rows: teamRows, meta: meta,
-                                            criteria: signingCriteria(), interest: interestModel, season: season, limit: 200)
+                                            criteria: signingCriteria(), interest: interestModel, season: season, limit: 200,
+                                            style: targetStyle)
         }
         let cols = columns(for: "signings")
         if !cols.isEmpty, let reader {

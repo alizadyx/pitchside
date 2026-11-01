@@ -131,6 +131,13 @@ struct PresetsPane: View {
                     Label("Use as my tactic", systemImage: "arrow.right.circle.fill")
                 }
                 .help("Copies the In Possession shape, both roles per position, the style, mentality and team instructions into My tactic")
+                Button {
+                    store.buildTowards(pf.preset)
+                    onUse()
+                } label: {
+                    Label("Build towards", systemImage: "scope")
+                }
+                .help("Keep your tactic, and plan towards this preset: My tactic gets a Target switch showing your gaps and the signings that would get you there")
                 Text("Each player is judged in the preset's roles: 60% his In Possession role at the IP position, 40% his Out of Possession role, with a cost when he isn't natural at either position.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }

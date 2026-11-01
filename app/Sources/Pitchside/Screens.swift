@@ -280,8 +280,29 @@ struct SquadView: View {
     }
 
     private var pitchHeader: some View {
-        let n = store.workingFormation.slots.count
-        return HStack(spacing: 8) {
+        @Bindable var store = store
+        let n = store.formation.slots.count
+        return VStack(alignment: .leading, spacing: 8) {
+            if let t = store.targetPreset {
+                HStack(spacing: 8) {
+                    Picker("Plan for", selection: $store.planForTarget) {
+                        Text("My tactic").tag(false)
+                        Text("Target: \(t.style), \(t.name)").tag(true)
+                    }
+                    .pickerStyle(.segmented).fixedSize()
+                    .help("Target: the FM preset you're building towards (FM presets → Build towards). The pitch, gaps and signings follow it")
+                    Button { store.targetPresetId = "" } label: { Image(systemName: "xmark.circle") }
+                        .buttonStyle(.borderless).help("Stop building towards this preset")
+                }
+                if store.planningTarget { TargetGapCard() }
+            }
+            pitchHeaderRow(n)
+        }
+        .frame(maxWidth: 560)
+    }
+
+    private func pitchHeaderRow(_ n: Int) -> some View {
+        HStack(spacing: 8) {
             Text("\(n) positions")
                 .font(.callout)
                 .foregroundStyle(n == 11 ? Color.secondary : Color.orange)
@@ -294,20 +315,24 @@ struct SquadView: View {
             .font(.caption).foregroundStyle(.secondary)
             .help("Circle colour: how far the starter is below your XI level (more than 1 point: weak spot; more than 2.5 or nobody: big gap)")
             Spacer()
-            Text("Click a position to edit it, or right-click")
-                .font(.caption).foregroundStyle(.secondary)
-            Menu {
-                ForEach(Formations.positions, id: \.self) { p in
-                    Button("\(Formations.positionName(p)) (\(p))") { store.addSlot(p) }
+            if store.planningTarget {
+                Text("Target preset: switch to My tactic to edit your own")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Click a position to edit it, or right-click")
+                    .font(.caption).foregroundStyle(.secondary)
+                Menu {
+                    ForEach(Formations.positions, id: \.self) { p in
+                        Button("\(Formations.positionName(p)) (\(p))") { store.addSlot(p) }
+                    }
+                } label: {
+                    Label("Add", systemImage: "plus")
                 }
-            } label: {
-                Label("Add", systemImage: "plus")
+                .menuStyle(.button)
+                .buttonStyle(.borderless)
+                .fixedSize()
             }
-            .menuStyle(.button)
-            .buttonStyle(.borderless)
-            .fixedSize()
         }
-        .frame(maxWidth: 560)
     }
 
     private var emptyState: some View {
@@ -356,6 +381,11 @@ struct SquadView: View {
                         .buttonStyle(.plain)
                         .help("Add to or remove from your shortlist")
                         Text(s.row.name).fontWeight(.medium).lineLimit(1)
+                        if let st = s.style {
+                            Text(String(format: "style %+.1f", st)).font(.caption2.weight(.semibold)).monospacedDigit()
+                                .foregroundStyle(st >= 0.5 ? Color.green : st <= -0.5 ? Color.orange : Color.secondary)
+                                .help("How well his attributes suit the target style's instructions in this position (0 = neutral). Signings are ranked by gain plus half of this.")
+                        }
                     }
                 }
                 .width(min: 150, ideal: 200).customizationID("name")
@@ -373,7 +403,8 @@ struct SquadView: View {
                 }
                 .width(min: 36, ideal: 42, max: 50).customizationID("role")
                 TableColumn("Gain", value: \.gain) { s in
-                    Text(String(format: "+%.1f", s.gain)).monospacedDigit().fontWeight(.semibold).foregroundStyle(.green)
+                    Text(String(format: "%+.1f", s.gain)).monospacedDigit().fontWeight(.semibold)
+                        .foregroundStyle(s.gain > 0 ? Color.green : s.gain < -0.05 ? Color.orange : Color.secondary)
                 }
                 .width(min: 40, ideal: 46, max: 54).customizationID("gain")
                 TableColumn("CA/PA", value: \.ca) { s in Text("\(s.row.ca)/\(s.row.pa)").monospacedDigit() }.width(min: 54, ideal: 60, max: 70).customizationID("ca-pa")
@@ -1180,5 +1211,54 @@ struct SquadTimelineView: View {
             }
             .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+
+/// How far your squad is from the preset you're building towards.
+struct TargetGapCard: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        if let tf = store.targetFit, let report = store.squadReport {
+            let gaps = report.slots.filter { $0.weakness > 0.5 }.sorted { $0.weakness > $1.weakness }.prefix(3)
+            let weakest = (tf.style?.demands ?? []).sorted { $0.score < $1.score }.prefix(2)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 14) {
+                    stat("Target XI", String(format: "%.1f", tf.fit.level), store.scoreColor(tf.fit.level),
+                         "Best XI level in the preset's roles (1–20)")
+                    if let mine = store.myTacticFit {
+                        stat("Your tactic", String(format: "%.1f", mine.level), store.scoreColor(mine.level),
+                             "Best XI level in your own tactic, for comparison")
+                    }
+                    if let st = tf.style {
+                        stat("Style fit", String(format: "%+.1f", st.score), st.score >= 0.3 ? .green : st.score <= -0.3 ? .orange : .secondary,
+                             "How your XI's attributes suit the preset's team instructions, against what their positions usually need (0 = neutral)")
+                    }
+                    stat("Out of position", "\(tf.fit.outOfPosition)", tf.fit.outOfPosition > 0 ? .orange : .green,
+                         "XI players not natural at their in-possession position")
+                }
+                if !gaps.isEmpty {
+                    Text("Biggest gaps: " + gaps.map { "\($0.slot.label) \($0.starter == nil ? "nobody" : String(format: "%.1f", $0.starterScore))" }.joined(separator: " · "))
+                        .font(.caption)
+                }
+                if !weakest.isEmpty {
+                    Text("Weakest for the style: " + weakest.map { "\($0.label) (\($0.group.lowercased()) \(String(format: "%+.1f", $0.score)))" }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Text("Click a position for signings in the preset's roles; they're also ranked by how they suit the style.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .background(Theme.panelAlt, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func stat(_ title: String, _ value: String, _ color: Color, _ help: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+            Text(value).font(.callout.bold()).monospacedDigit().foregroundStyle(color)
+        }
+        .help(help)
     }
 }

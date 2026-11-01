@@ -10,13 +10,15 @@ public struct Slot: Sendable, Hashable, Identifiable, Codable {
     public var position: String   // FM position code used for familiarity
     public var role: String       // IP role code (Roles.all)
     public var oop: String        // OOP role code (Roles.all); "" = judge on the IP role only
+    /// Where the player stands out of possession, when not the same position (FM presets).
+    public var oopPosition: String? = nil
 
     public init(_ label: String, _ position: String, _ role: String, _ oop: String? = nil) {
         self.label = label; self.position = position; self.role = role
         self.oop = oop ?? Formations.defaultOOP(for: position)
     }
 
-    enum CodingKeys: String, CodingKey { case label, position, role, oop }
+    enum CodingKeys: String, CodingKey { case label, position, role, oop, oopPosition }
 
     /// Formations saved by 0.4 and earlier have FM24-style role codes and no OOP role.
     public init(from decoder: Decoder) throws {
@@ -28,6 +30,7 @@ public struct Slot: Sendable, Hashable, Identifiable, Codable {
         if Roles.role(role)?.isIP != true { role = Formations.defaultRole(for: position) }
         oop = try c.decodeIfPresent(String.self, forKey: .oop)
             ?? Roles.legacyOOP(old) ?? Formations.defaultOOP(for: position)
+        oopPosition = try c.decodeIfPresent(String.self, forKey: .oopPosition)
     }
 }
 
@@ -335,6 +338,13 @@ public enum SquadBuilder {
         slotScore(r, ip: roleIndex(slot.role), oop: roleIndex(slot.oop))
     }
 
+    /// Cost of an unfamiliar out-of-possession position (FM presets move some players without the ball):
+    /// 40% of the familiarity penalty there, as in the presets ranking.
+    static func oopCost(_ r: PlayerRow, _ slot: Slot, _ posIndex: [String: Int]) -> Double {
+        guard let op = slot.oopPosition, op != slot.position else { return 0 }
+        return (1 - ipShare) * (TacticsAdvisor.familiarityPenalty(familiarity(r, posIndex[op])) ?? 3)
+    }
+
     static func familiarity(_ r: PlayerRow, _ posIdx: Int?) -> UInt8 {
         guard let i = posIdx, let f = r.person.pos, i < f.count else { return 0 }
         return f[i]
@@ -369,7 +379,7 @@ public enum SquadBuilder {
             let ri = roleIndex(slot.role), oi = roleIndex(slot.oop)
             guard ri != nil || oi != nil else { continue }
             for (pi, r) in squad.enumerated() where familiarity(r, posIndex[slot.position]) >= minFamiliarity {
-                value[si][pi] = slotScore(r, ip: ri, oop: oi)
+                value[si][pi] = slotScore(r, ip: ri, oop: oi) - oopCost(r, slot, posIndex)
             }
         }
         var starter = [Int: Pair]()
@@ -417,6 +427,10 @@ public enum SquadBuilder {
         public let score: Double
         public let gain: Double
         public var interest: InterestAssessment? = nil
+        /// How well his attributes suit the target style's instructions at this position (signed); nil without a target.
+        public var style: Double? = nil
+        /// Ranking value with a target style: role gain plus half the style lean.
+        public var targetValue: Double { gain + 0.5 * (style ?? 0) }
 
         // Sort keys for the signings table.
         public var name: String { row.name }
@@ -433,15 +447,17 @@ public enum SquadBuilder {
     /// Players who would improve this slot, affordable and (optionally) keen enough to join.
     public static func suggestions(for a: SlotAnalysis, report: SquadReport, rows: [PlayerRow], meta: ExportMeta,
                                    criteria c: SigningCriteria, interest model: InterestModel? = nil, season: Int = 0,
-                                   limit: Int = 40) -> [Suggestion] {
+                                   limit: Int = 40, style: FMStyle? = nil) -> [Suggestion] {
         let ri = roleIndex(a.slot.role), oi = roleIndex(a.slot.oop)
         guard ri != nil || oi != nil else { return [] }
         let posIdx = meta.positionKeys.firstIndex(of: a.slot.position)
+        let posIndex = Dictionary(uniqueKeysWithValues: meta.positionKeys.enumerated().map { ($1, $0) })
+        let reader = style.map { _ in TacticsAdvisor.Reader(meta) }
         let baseline = c.forDepth ? (a.backup == nil ? 0 : a.backupScore) : (a.starter == nil ? 0 : a.starterScore)
         var out: [Suggestion] = []
         for r in rows where c.everyone || (r.person.club != report.club && r.person.own != report.club) {
             let fam = familiarity(r, posIdx)
-            var score = slotScore(r, ip: ri, oop: oi)
+            var score = slotScore(r, ip: ri, oop: oi) - oopCost(r, a.slot, posIndex)
             if c.everyone {
                 // Out of position: same cost as in the tactics advisor (unusable there counts 4).
                 score = ((score - (TacticsAdvisor.familiarityPenalty(fam) ?? 4)) * 10).rounded() / 10
@@ -457,11 +473,13 @@ public enum SquadBuilder {
                 if c.maxWageGbp > 0, let w = r.person.wage, w > c.maxWageGbp { continue }
                 if let min = c.minInterest, let i = interest, i.level < min { continue }
             }
-            out.append(Suggestion(row: r, score: score, gain: gain, interest: interest))
+            var sug = Suggestion(row: r, score: score, gain: gain, interest: interest)
+            if let style, let reader { sug.style = PresetStyle.lean(style, r, at: a.slot.position, reader: reader) }
+            out.append(sug)
         }
         // Best improvement first; among similar gains, younger and cheaper.
         out.sort { x, y in
-            let bx = (x.gain * 2).rounded(.down), by = (y.gain * 2).rounded(.down)   // half-point buckets
+            let bx = (x.targetValue * 2).rounded(.down), by = (y.targetValue * 2).rounded(.down)   // half-point buckets
             if bx != by { return bx > by }
             if x.row.age != y.row.age { return x.row.age < y.row.age }
             return (x.row.person.val ?? Int.max) < (y.row.person.val ?? Int.max)

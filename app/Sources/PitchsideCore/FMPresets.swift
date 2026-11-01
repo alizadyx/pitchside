@@ -32,7 +32,11 @@ public struct FMPreset: Sendable, Identifiable, Hashable {
     /// The preset as a Pitchside formation (IP positions, IP + OOP roles, labelled left to right).
     public var formation: Formation {
         // The game lists each line right to left; relabel works left to right.
-        let raw = slots.reversed().map { Slot("", $0.ipPosition, $0.ipRole, $0.oopRole) }
+        let raw = slots.reversed().map { ps -> Slot in
+            var sl = Slot("", ps.ipPosition, ps.ipRole, ps.oopRole)
+            if ps.oopPosition != ps.ipPosition { sl.oopPosition = ps.oopPosition }
+            return sl
+        }
         var f = Formation(name: "\(ip) \(style)", slots: Array(Formations.relabel(raw).reversed()))
         f.style = style
         let st = FMPresets.style(style)

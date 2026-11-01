@@ -160,6 +160,19 @@ final class TacticsTests: XCTestCase {
         XCTAssertEqual(ins["Attacking Transition"], "Counter")
         XCTAssertEqual(ins["Tempo"], "Much Higher")
         XCTAssertNil(ins["Tackling"])
+        // Mixed shapes keep where players stand without the ball.
+        let gp02 = FMPresets.all.first { $0.id == "GP02" }!.formation
+        XCTAssertTrue(gp02.slots.contains { $0.oopPosition == "ST" })
+        XCTAssertTrue(FMPresets.all.first { $0.id == "GP01" }!.formation.slots.allSatisfy { $0.oopPosition == nil })
+        // Building towards a style: signings carry a style lean and are ranked with it.
+        let report = SquadBuilder.analyse(club: "Home FC", formation: FMPresets.all.first { $0.id == "GP01" }!.formation,
+                                          rows: rows, meta: meta, season: 2026)
+        if let slot = report.slots.first {
+            var c = SigningCriteria(); c.everyone = true
+            let sugg = SquadBuilder.suggestions(for: slot, report: report, rows: rows, meta: meta, criteria: c,
+                                                limit: 50, style: FMPresets.style("Gegenpress"))
+            XCTAssertTrue(sugg.allSatisfy { $0.style != nil })
+        }
     }
 
     func testSetPiecesAndCaptain() {

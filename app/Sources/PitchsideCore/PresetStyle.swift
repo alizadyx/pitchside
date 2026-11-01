@@ -153,8 +153,17 @@ public enum PresetStyle {
     }
 
     /// `xi`: each player with the position he plays in possession.
+    /// One player's lean towards the style at a position: what it asks of that position, against his own
+    /// level there (signed, 0 = neutral).
+    static func lean(_ style: FMStyle, _ r: PlayerRow, at position: String, reader: TacticsAdvisor.Reader) -> Double {
+        evaluate(style, xi: [(r, position)], reader: reader).score
+    }
+
     public static func evaluate(_ style: FMStyle, xi: [(PlayerRow, String)], meta: ExportMeta) -> Result {
-        let R = TacticsAdvisor.Reader(meta)
+        evaluate(style, xi: xi, reader: TacticsAdvisor.Reader(meta))
+    }
+
+    static func evaluate(_ style: FMStyle, xi: [(PlayerRow, String)], reader R: TacticsAdvisor.Reader) -> Result {
         var base = [UInt32: Double]()
         for (r, pos) in xi { base[r.id] = baseline(r, position: pos, reader: R) }
         var demands: [Demand] = []

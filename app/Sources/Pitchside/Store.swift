@@ -181,6 +181,14 @@ final class Store {
     // MARK: Tactics advisor state
     /// Every formation fitted to your squad, best first.
     private(set) var tacticsFits: [TacticsAdvisor.FormationFit] = []
+    /// Every FM27 preset (style + IP/OOP shapes) fitted to the squad, best first.
+    private(set) var presetFits: [TacticsAdvisor.PresetFit] = []
+    var presetChoice: String?
+    var presetStyle = ""
+    var presetFit: TacticsAdvisor.PresetFit? {
+        let shown = presetFits.filter { presetStyle.isEmpty || $0.preset.style == presetStyle }
+        return shown.first { $0.id == presetChoice } ?? shown.first
+    }
     /// The formation being looked at in Tactics (nil = the best one).
     var tacticsChoice: String? { didSet { refreshTacticsDetail() } }
     /// -1 = work it out from where your XI ranks in your league.
@@ -741,7 +749,7 @@ final class Store {
     func refreshSquad() {
         guard let meta, !myClub.isEmpty, !allPlayers.isEmpty else {
             squadReport = nil; suggestions = []; clubTeams = []; squadTimeline = []
-            tacticsFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; myTacticFit = nil; return
+            tacticsFits = []; presetFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; myTacticFit = nil; return
         }
         ensureInterestModel()
         let side = teamRows
@@ -768,8 +776,9 @@ final class Store {
 
     func refreshTactics() {
         guard let meta, let report = squadReport else {
-            tacticsFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; return
+            tacticsFits = []; presetFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; return
         }
+        presetFits = TacticsAdvisor.rankPresets(squad: report.squad, meta: meta)
         let shapes = Formations.presets + customFormations.filter { c in !Formations.presets.contains { $0.name == c.name } }
         tacticsFits = TacticsAdvisor.rankFormations(shapes, squad: report.squad, meta: meta)
         myTacticFit = TacticsAdvisor.fit(workingFormation, squad: report.squad, meta: meta, keepRoles: true)

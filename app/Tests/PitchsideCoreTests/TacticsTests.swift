@@ -124,6 +124,32 @@ final class TacticsTests: XCTestCase {
         XCTAssertLessThan(threeBack.rating, best.rating)
     }
 
+    func testFMPresets() {
+        XCTAssertEqual(Set(FMPresets.all.map(\.style)).count, FMPresets.styles.count)
+        for p in FMPresets.all {
+            XCTAssertEqual(p.slots.count, 11, p.id)
+            for s in p.slots {
+                XCTAssertEqual(Roles.role(s.ipRole)?.isIP, true, "\(p.id) \(s.ipRole)")
+                XCTAssertEqual(Roles.role(s.oopRole)?.isIP, false, "\(p.id) \(s.oopRole)")
+                XCTAssertTrue(Formations.positions.contains(s.ipPosition) && Formations.positions.contains(s.oopPosition), p.id)
+            }
+            XCTAssertEqual(Set(p.formation.slots.map(\.label)).count, 11, p.id)
+        }
+        // The game lists lines right to left: the first full-back slot is the right back.
+        let cp = FMPresets.all.first { $0.id == "CP01" }!
+        XCTAssertEqual(cp.formation.slots[1].label, "RB")
+        XCTAssertEqual(cp.formation.slots[2].label, "RCB")
+
+        var t = Factory()
+        let rows = rows(t.homeSquad()).filter { $0.person.club == "Home FC" }
+        let ranked = TacticsAdvisor.rankPresets(squad: rows, meta: meta)
+        XCTAssertEqual(ranked.count, FMPresets.all.count)
+        // Built for 4-3-3: a back-four preset beats a back-five one.
+        XCTAssertEqual(ranked[0].fit.outOfPosition, 0, ranked[0].preset.title)
+        let five = ranked.first { $0.preset.ip.hasPrefix("5") }!
+        XCTAssertLessThan(five.rating, ranked[0].rating)
+    }
+
     func testSetPiecesAndCaptain() {
         var t = Factory()
         var people = t.homeSquad()

@@ -149,7 +149,7 @@ struct FormationsPane: View {
 }
 
 /// The suggested XI on a pitch.
-private struct TacticsPitch: View {
+struct TacticsPitch: View {
     let fit: TacticsAdvisor.FormationFit
     var scale: ScoreScale? = nil
 

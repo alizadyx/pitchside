@@ -12,6 +12,7 @@ let package = Package(
             dependencies: ["PitchsideCore"],
             path: "Sources/Pitchside"
         ),
+        .executableTarget(name: "PitchsideAudit", dependencies: ["PitchsideCore"], path: "Sources/PitchsideAudit"),
         .testTarget(name: "PitchsideCoreTests", dependencies: ["PitchsideCore"], path: "Tests/PitchsideCoreTests"),
     ]
 )

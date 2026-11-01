@@ -19,15 +19,22 @@ hidden attributes and potential, and plan your squad.
 - **FM27 role ratings:** every In Possession and Out of Possession role in FM27 (79 in all), using the
   key and preferable attributes the game itself highlights on the player screen. The scores rank roles
   in the same order as FM's role stars (70 of 73 test comparisons, the rest near-ties). There is also a
-  meta score weighted towards the attributes that matter most in FM's match engine.
+  **meta score** weighted towards the attributes that matter most in FM's match engine (pace and
+  acceleration first, after the FM-Arena community testing), with keepers calibrated onto the same scale,
+  and **Meta %**: where a player would rank among the first-team players of your division, so you can
+  see at a glance whether a signing would be one of the best in your league.
 - **Tactics & squad:** build your own tactic (25 shapes or a blank pitch, any position, any IP and OOP
   role, your mentality, style and team instructions), saved under a name. See your best XI in it,
   everyone at the club who could play each position, when a player would suit another role better,
   and the signings that would improve each position, or the biggest upgrades across the whole team.
-  **Suggested** ranks every shape for your squad with the best roles; **Set pieces** picks corner,
+  **Suggested** ranks every shape for your squad with the best roles; **FM presets** ranks all 90 tactic
+  presets the game offers (10 styles, each with its In and Out of Possession shapes) for your squad: the
+  best XI in each preset's own roles, where players move without the ball, and a separate **style fit**
+  showing whether your players' strengths suit the style's team instructions. One click copies a preset,
+  with its mentality and instructions, into your tactic; **Set pieces** picks corner,
   free-kick and penalty takers, aerial targets, who stays back and captains; **Instructions** suggests a
   mentality, style and team instructions with the attributes behind each, against your squad and your
-  league. **My squad** and **Timeline** split by first team, U21 and U18, and show what the whole club's
+  league. **My squad** and **Timeline** split by first team, U21 and U18 (with players on loan in and out), and show what the whole club's
   best XI would be, naming youngsters who'd start. **Depth** lays your formation out as a depth chart:
   every position lists the players in your squad who can play there, best first.
 - **Compare teams:** pick a country, then a league, and see it as a sortable table (XI level, depth, CA/PA, each line, technique,

@@ -38,11 +38,44 @@ public enum ShortlistImport {
                                      "u18", "u19", "lst*", "bid*"]
     static let headers: Set<String> = ["inf", "name", "age", "nation", "club", "position", "value", "wage"]
 
-    /// Groups tokens into rows by vertical position and reads each as name, age and nation.
+    static func isAge(_ w: String) -> Bool { Int(w).map { (14...50).contains($0) } ?? false }
+    static func isNation(_ w: String) -> Bool { w.count == 3 && w.allSatisfy { $0.isUppercase && $0.isLetter } && Nations.byCode[w] != nil }
+
+    /// Groups tokens into table rows and reads each as name, age and nation. Rows are anchored on the
+    /// nation codes (every row has one, at the row's centre line) or, without a Nation column, on the
+    /// ages; every other piece of text joins the nearest row. Two-line cells (position + role) then
+    /// can't spill into the next player's row.
     public static func lines(_ tokens: [Token]) -> [Line] {
-        let sorted = tokens.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }.sorted { $0.y < $1.y }
+        let toks = tokens.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        let nat = toks.filter { isNation($0.text) }, age = toks.filter { isAge($0.text) }
+        var anchors: [Double] = []
+        // Nation codes and ages both sit on a row's centre line; either one anchors the row.
+        for y in (nat + age).map(\.y).sorted() {
+            if let last = anchors.last, y - last < 0.004 { continue }
+            anchors.append(y)
+        }
+        guard anchors.count >= 2 else { return linesByGap(toks) }
+        let gaps = zip(anchors.dropFirst(), anchors).map { $0 - $1 }.sorted()
+        let gap = gaps[gaps.count / 2]
+        var rows = [[Token]](repeating: [], count: anchors.count)
+        for t in toks {
+            // Nearest anchor (anchors are sorted).
+            var lo = 0, hi = anchors.count - 1
+            while lo < hi { let mid = (lo + hi) / 2; if anchors[mid] < t.y { lo = mid + 1 } else { hi = mid } }
+            let i = [lo - 1, lo].filter { $0 >= 0 }.min { abs(anchors[$0] - t.y) < abs(anchors[$1] - t.y) } ?? lo
+            if abs(anchors[i] - t.y) <= gap * 0.45 { rows[i].append(t) }
+        }
+        return rows.compactMap { r in
+            // Only the row's own line: the role line under the position is not part of the name.
+            let line = r.filter { abs($0.y - (r.first { isNation($0.text) || isAge($0.text) }?.y ?? $0.y)) <= gap * 0.25 }
+            return parse(line.sorted { $0.x < $1.x }.map(\.text).joined(separator: " "))
+        }
+    }
+
+    /// Fallback without anchors: group by vertical position.
+    static func linesByGap(_ toks: [Token]) -> [Line] {
         var rows: [[Token]] = []
-        for t in sorted {
+        for t in toks.sorted(by: { $0.y < $1.y }) {
             if var last = rows.last, let ref = last.first, abs(t.y - ref.y) < max(ref.h, t.h) * 0.6 {
                 last.append(t); rows[rows.count - 1] = last
             } else {
@@ -60,27 +93,19 @@ public enum ShortlistImport {
                 || chips.contains(w.lowercased().trimmingCharacters(in: .punctuationCharacters)) {
             words.removeFirst()
         }
-        func isAge(_ w: String) -> Bool { Int(w).map { (14...50).contains($0) } ?? false }
-        func isNation(_ w: String) -> Bool { w.count == 3 && w.allSatisfy { $0.isUppercase && $0.isLetter } && Nations.byCode[w] != nil }
-        let nameEnd: Int, ageIdx: Int?
-        if let n = words.firstIndex(where: isNation), let a0 = words.firstIndex(where: isAge), n < a0 {
-            // Player Database order: name, nation, club, position, age…
-            nameEnd = n
-            ageIdx = a0
-        } else if let a0 = words.firstIndex(where: isAge) {
-            // Shortlist order: name, age, nation, club…
-            nameEnd = a0
-            ageIdx = a0
-        } else { return nil }
-        guard nameEnd > 0, let ai = ageIdx else { return nil }
+        let natIdx = words.firstIndex(where: isNation), ageIdx = words.firstIndex(where: isAge)
+        // The name ends at the first of nation code and age (Player Database: name, nation…;
+        // Shortlist: name, age, nation…). The age may be unreadable; the nation code is enough.
+        guard let nameEnd = [natIdx, ageIdx].compactMap({ $0 }).min(), nameEnd > 0 else { return nil }
         let nameWords = words[..<nameEnd].filter { $0.contains(where: { $0.isLetter || $0.isNumber }) }
         guard !nameWords.isEmpty else { return nil }
         let name = nameWords.joined(separator: " ")
         if headers.contains(name.lowercased()) { return nil }
         // Position text ("ST (C)") or other cells misread as a row: real names have lower-case letters.
         guard name.contains(where: \.isLowercase) else { return nil }
-        let nation = words.first(where: isNation)
-        return Line(name: name, age: Int(words[ai]), nation: nation, raw: raw)
+        let nation = natIdx.map { words[$0] }
+        let age = words[nameEnd...].first(where: isAge).flatMap { Int($0) }
+        return Line(name: name, age: age, nation: nation, raw: raw)
     }
 
     // MARK: Matching
@@ -183,7 +208,9 @@ public enum ShortlistImport {
             return Match(line: line, player: c.first, confidence: c.count == 1 && ageOK ? .exact : .unsure,
                          alternatives: max(0, c.count - 1))
         }
-        // Small recognition slips: same surname or close spelling, and the age must fit.
+        // Small recognition slips: same surname or close spelling, and the age must fit. Only for a
+        // full name: loose matching of a stray word ("Ss") finds some unrelated player.
+        guard key.contains(" "), key.count >= 6 else { return Match(line: line, player: nil, confidence: .unsure, alternatives: 0) }
         var candidates: [String] = []
         if let last = key.split(separator: " ").last { candidates = idx.bySurname[String(last)] ?? [] }
         let close = candidates.filter { distance($0, key) <= 3 }
@@ -193,7 +220,10 @@ public enum ShortlistImport {
             pool = idx.byName.filter { k, _ in k.first == key.first && abs(k.count - key.count) <= 2 && distance(k, key) <= 2 }
                 .flatMap(\.value)
         }
-        let c = narrow(pool).filter { r in line.age.map { abs(r.age - $0) <= 1 } ?? true }
+        let country = line.nation.flatMap { idx.nations[$0] }
+        let c = narrow(pool).filter { r in
+            (line.age.map { abs(r.age - $0) <= 1 } ?? true) && (country.map { r.person.nat == $0 } ?? true)
+        }
         guard let best = c.min(by: { distance(normalise($0.name), key) < distance(normalise($1.name), key) }) else {
             return Match(line: line, player: nil, confidence: .unsure, alternatives: 0)
         }

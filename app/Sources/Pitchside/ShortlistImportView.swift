@@ -103,11 +103,12 @@ struct ShortlistImportSheet: View {
             }
             let lines = tokens.flatMap { ShortlistImport.lines($0) }
             let result = ShortlistImport.match(lines, index: .init(rows))
+            let failedCount = failed, noRows = lines.isEmpty
             await MainActor.run {
                 matches = result
                 busy = false
-                if failed > 0 { error = "\(failed) file\(failed == 1 ? "" : "s") couldn't be read." }
-                else if lines.isEmpty { error = "No player rows found. Are these screenshots of an FM player list?" }
+                if failedCount > 0 { error = "\(failedCount) file\(failedCount == 1 ? "" : "s") couldn't be read." }
+                else if noRows { error = "No player rows found. Are these screenshots of an FM player list?" }
             }
         }
     }

@@ -35,7 +35,9 @@ public struct FMPreset: Sendable, Identifiable, Hashable {
         let raw = slots.reversed().map { Slot("", $0.ipPosition, $0.ipRole, $0.oopRole) }
         var f = Formation(name: "\(ip) \(style)", slots: Array(Formations.relabel(raw).reversed()))
         f.style = style
-        f.mentality = FMPresets.style(style)?.mentality
+        let st = FMPresets.style(style)
+        f.mentality = st?.mentality
+        f.instructions = st?.catalogueInstructions() ?? [:]
         return f
     }
 }
@@ -54,6 +56,34 @@ public struct FMStyle: Sendable, Identifiable {
     /// Settings that differ from the neutral "Standard"/"Balanced".
     public func highlights(_ phase: String) -> [(String, String)] {
         settings(phase).filter { !["Standard", "Balanced", "Keep Ball in Play", "No"].contains($0.1) }
+    }
+}
+
+extension FMStyle {
+    /// The style's instructions in the names and options of Pitchside's instruction list
+    /// (TacticsAdvisor.catalogue). Neutral settings are left at Default.
+    public func catalogueInstructions() -> [String: String] {
+        let names = ["Attacking Width": "Team Width", "Line of Engagement": "Line Of Engagement",
+                     "Shots from Distance": "Shots From Distance", "Trigger Press": "Pressing Intensity",
+                     "GK Distribution": "Distribute To", "GK Distribution (Speed)": "Distribution Speed",
+                     "Short Goalkeeper Distribution": "Prevent Short GK Distribution", "Play for Set Pieces": "Play For Set Pieces"]
+        let values = ["Counter-Attack": "Counter", "More Expressive": "Be More Expressive", "More Disciplined": "Be More Disciplined",
+                      "High Press": "High", "Mid Block": "Mid", "Low Block": "Low", "Lower": "Deeper", "Much Lower": "Much Deeper",
+                      "More Often": "Higher", "Much More Often": "Much Higher", "Less Often": "Lower", "Much Less Often": "Much Lower",
+                      "Step Up More": "Hold Line", "Drop Off More": "Drop Off", "Encourage": "Run At Defence", "Discourage": "Dribble Less",
+                      "Pass Into Space": "Into Space", "Pass Into Feet": "Into Feet", "Distribute Quickly": "Quick",
+                      "Slow Pace Down": "Slow", "Yes": "On", "Play For Set Pieces": "On"]
+        var out = [String: String]()
+        for row in instructions {
+            let (setting, value) = (row[2], row[3])
+            if ["Standard", "Balanced", "No", "Mixed", "Keep Ball in Play"].contains(value) { continue }
+            let name = names[setting] ?? setting
+            guard let spec = TacticsAdvisor.catalogue.first(where: { $0.name.lowercased() == name.lowercased() }) else { continue }
+            // Pressing Intensity comes from Trigger Press; Time Wasting's own Less/More Often stay as they are.
+            let v = (setting == "Time Wasting") ? value : (values[value] ?? value)
+            if let o = spec.options.first(where: { $0.lowercased() == v.lowercased() }) { out[spec.name] = o }
+        }
+        return out
     }
 }
 
@@ -76,8 +106,8 @@ extension TacticsAdvisor {
         public let style: PresetStyle.Result?
         public var rating: Double { fit.rating }
         public var styleScore: Double { style?.score ?? 0 }
-        /// Roles and style fit weighed equally.
-        public var combined: Double { (fit.level + styleScore) / 2 }
+        /// XI level nudged by the squad's lean: half a level per point of style fit.
+        public var combined: Double { fit.level + 0.5 * styleScore }
     }
 
     /// Cost of an unfamiliar OOP position. The player only spends part of the game there,

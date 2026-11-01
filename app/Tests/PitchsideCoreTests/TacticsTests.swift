@@ -152,7 +152,14 @@ final class TacticsTests: XCTestCase {
         for f in ranked { XCTAssertFalse(f.style?.demands.isEmpty ?? true, f.preset.title) }
         let gp = ranked.first { $0.preset.style == "Gegenpress" }!
         XCTAssertTrue(gp.style!.demands.prefix(3).contains { $0.label.hasPrefix("Line of Engagement") }, gp.style!.demands.map(\.label).joined(separator: ", "))
-        XCTAssertTrue((1...20).contains(gp.styleScore))
+        XCTAssertLessThan(abs(gp.styleScore), 10)
+        // Loading a preset brings its instructions in Pitchside's names.
+        let ins = FMPresets.all.first { $0.style == "Gegenpress" }!.formation.instructions ?? [:]
+        XCTAssertEqual(ins["Line Of Engagement"], "High")
+        XCTAssertEqual(ins["Pressing Intensity"], "Much Higher")
+        XCTAssertEqual(ins["Attacking Transition"], "Counter")
+        XCTAssertEqual(ins["Tempo"], "Much Higher")
+        XCTAssertNil(ins["Tackling"])
     }
 
     func testSetPiecesAndCaptain() {

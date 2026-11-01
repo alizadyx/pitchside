@@ -49,7 +49,7 @@ struct PresetsPane: View {
                     Text("Both").tag(2)
                 }
                 .pickerStyle(.segmented)
-                .help("Roles: how well your best XI plays the preset's roles. Style fit: how well it suits the style's team instructions. Both: the two averaged.")
+                .help("Roles: how well your best XI plays the preset's roles. Style fit: whether your players' strengths lean towards what the style asks. Both: roles level plus half the style lean.")
             }
             .padding(8)
             List(selection: Binding(get: { store.presetFit?.id }, set: { store.presetChoice = $0 })) {
@@ -64,8 +64,8 @@ struct PresetsPane: View {
                             Text(String(format: "%.1f", f.fit.level)).bold(store.presetSort != 1).monospacedDigit()
                                 .foregroundStyle(store.scoreColor(f.fit.level))
                                 .frame(minWidth: 30, alignment: .trailing)
-                            Text(String(format: "%.1f", f.styleScore)).bold(store.presetSort != 0).monospacedDigit()
-                                .foregroundStyle(gapColor(f.styleScore, best: shown.map(\.styleScore).max() ?? 0))
+                            Text(String(format: "%+.1f", f.styleScore)).bold(store.presetSort != 0).monospacedDigit()
+                                .foregroundStyle(leanColor(f.styleScore))
                                 .frame(minWidth: 30, alignment: .trailing)
                             Image(systemName: "crown.fill").foregroundStyle(f.id == best?.id ? Theme.gold : .clear)
                                 .help(f.id == best?.id ? "Best preset for your squad by the chosen ranking" : "")
@@ -79,7 +79,7 @@ struct PresetsPane: View {
                         Text("Roles").frame(minWidth: 30, alignment: .trailing)
                             .help("XI level (1–20): average score of the best eleven in this preset's roles")
                         Text("Style").frame(minWidth: 30, alignment: .trailing)
-                            .help("Style fit (1–20): how well that XI's attributes suit the style's team instructions")
+                            .help("Style fit: how far the attributes this style asks for are above (+) or below (−) your players' own usual level. 0 = neutral.")
                         Image(systemName: "crown.fill").foregroundStyle(.clear)
                     }
                 }
@@ -96,10 +96,9 @@ struct PresetsPane: View {
         return s
     }
 
-    /// Green at the best, fading to red one point below: differences between presets are small.
-    private func gapColor(_ v: Double, best: Double) -> Color {
-        let d = best - v
-        return d < 0.15 ? .green : d < 0.4 ? Color(red: 0.6, green: 0.8, blue: 0.3) : d < 0.7 ? .yellow : d < 1 ? .orange : .red
+    /// Style lean: green when the squad leans towards what the style asks, red when away from it.
+    private func leanColor(_ v: Double) -> Color {
+        v >= 1 ? .green : v >= 0.3 ? Color(red: 0.6, green: 0.8, blue: 0.3) : v > -0.3 ? .secondary : v > -1 ? .orange : .red
     }
 
     private func summary(_ pf: TacticsAdvisor.PresetFit) -> some View {
@@ -118,8 +117,8 @@ struct PresetsPane: View {
                     .help(TeamCompare.metric("rating")?.explanation ?? "")
                 Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
                 Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
-                Stat(title: "Style fit", value: String(format: "%.1f", pf.styleScore), color: AttrColor.color(Int(pf.styleScore.rounded())))
-                    .help("How well this XI's attributes suit the style's team instructions (1–20). Separate from the role scores.")
+                Stat(title: "Style fit", value: String(format: "%+.1f", pf.styleScore), color: leanColor(pf.styleScore))
+                    .help("How far the attributes this style asks for are above (+) or below (−) these players' own usual level. 0 = neutral. Quality is in the role scores.")
                 if let m = FMPresets.style(pf.preset.style)?.mentality {
                     Stat(title: "Mentality", value: m, color: .secondary)
                 }
@@ -131,7 +130,7 @@ struct PresetsPane: View {
                 } label: {
                     Label("Use as my tactic", systemImage: "arrow.right.circle.fill")
                 }
-                .help("Copies the In Possession shape, both roles per position, the style and mentality into My tactic")
+                .help("Copies the In Possession shape, both roles per position, the style, mentality and team instructions into My tactic")
                 Text("Each player is judged in the preset's roles: 60% his In Possession role at the IP position, 40% his Out of Possession role, with a cost when he isn't natural at either position.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -190,8 +189,8 @@ struct PresetsPane: View {
                     GridRow {
                         Text(d.label).lineLimit(1)
                         Text(d.group).foregroundStyle(.secondary).lineLimit(1)
-                        Text(String(format: "%.1f", d.score)).bold().monospacedDigit()
-                            .foregroundStyle(AttrColor.color(Int(d.score.rounded())))
+                        Text(String(format: "%+.1f", d.score)).bold().monospacedDigit()
+                            .foregroundStyle(leanColor(d.score))
                         HStack(spacing: 4) {
                             Text(d.attributes.map(AttributeGroups.label).joined(separator: ", "))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -201,10 +200,10 @@ struct PresetsPane: View {
                         }
                     }
                     .font(.callout)
-                    .help("Average of these attributes across the \(d.group.lowercased()) in the XI, most important first")
+                    .help("These attributes compared with each player's own average, across the \(d.group.lowercased()) in the XI")
                 }
             }
-            Text("Each instruction that isn't Standard asks something of some players. Scores are their attribute averages, heavier instructions count more.")
+            Text("Each instruction that isn't Standard asks something of some players. + means those attributes are above the players' usual level, − below; heavier instructions count more.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .fmCard()

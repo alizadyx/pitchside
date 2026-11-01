@@ -1,8 +1,10 @@
 import Foundation
 
-/// How well an XI suits a tactical style: each non-neutral team instruction asks something of some
-/// players (a high press needs running, a high line needs quick defenders, short passing needs touch
-/// and composure…). Scored 1–20 from attributes, separately from the role scores.
+/// How well an XI's attribute profile suits a tactical style: each non-neutral team instruction asks
+/// something of some players (a high press needs running, a high line needs quick defenders, short
+/// passing needs touch and composure…). Each player is measured against his own average, so this is
+/// about what the squad leans towards, not how good it is (the role scores cover that).
+/// 0 = neutral, +2 = those attributes are two points above the players' usual level.
 public enum PresetStyle {
     public struct Demand: Sendable, Identifiable {
         public var id: String { label + group }
@@ -10,7 +12,7 @@ public enum PresetStyle {
         public let group: String        // who it applies to, e.g. "Outfield", "Defenders"
         public let attributes: [String]
         public let weight: Double
-        public let score: Double        // XI average of the weighted attributes (1–20)
+        public let score: Double        // XI average of (weighted attributes − player's own average)
     }
     public struct Result: Sendable {
         public let score: Double        // weighted average of the demands
@@ -132,9 +134,22 @@ public enum PresetStyle {
 
     static func strength(_ value: String) -> Double { value.hasPrefix("Much") ? 1.5 : 1 }
 
+    static let goalkeeping: Set<String> = ["Handling", "AerialReach", "CommandOfArea", "Communication", "Kicking", "Throwing",
+                                           "OneOnOnes", "Reflexes", "RushingOut", "Punching", "Eccentricity"]
+    static let notAbility: Set<String> = ["LeftFoot", "RightFoot"]
+
+    /// A player's usual attribute level: outfield attributes for outfielders, everything but feet for keepers.
+    static func baseline(_ r: PlayerRow, keeper: Bool, meta: ExportMeta, reader R: TacticsAdvisor.Reader) -> Double {
+        let keys = meta.playerAttrKeys.filter { !notAbility.contains($0) && (keeper || !goalkeeping.contains($0)) }
+        guard !keys.isEmpty else { return 10 }
+        return keys.reduce(0) { $0 + R.attr(r, $1) } / Double(keys.count)
+    }
+
     /// `xi`: each player with the position he plays in possession.
     public static func evaluate(_ style: FMStyle, xi: [(PlayerRow, String)], meta: ExportMeta) -> Result {
         let R = TacticsAdvisor.Reader(meta)
+        var base = [UInt32: Double]()
+        for (r, pos) in xi { base[r.id] = baseline(r, keeper: pos == "GK", meta: meta, reader: R) }
         var demands: [Demand] = []
         var seen = Set<String>()
         for row in style.instructions {
@@ -144,7 +159,7 @@ public enum PresetStyle {
                 guard seen.insert(key).inserted else { continue }      // settings repeated under sub-phases
                 let players = xi.filter { rule.group.contains($0.1) }.map(\.0)
                 guard !players.isEmpty else { continue }
-                let score = players.map { R.mix($0, rule.attrs) }.reduce(0, +) / Double(players.count)
+                let score = players.map { R.mix($0, rule.attrs) - (base[$0.id] ?? 10) }.reduce(0, +) / Double(players.count)
                 demands.append(Demand(label: "\(setting): \(value)", group: rule.group.rawValue,
                                       attributes: rule.attrs.map(\.0), weight: rule.weight * strength(value), score: score))
             }

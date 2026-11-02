@@ -107,13 +107,19 @@ ln -sfn "$real_contents/Resources/Data"               "$shadow_root/Data"
 ln -sfn "$shadow_app/Contents/Frameworks/GameAssembly.dylib" "$shadow_root/GameAssembly.dylib"
 ln -sfn "$BASEDIR/BepInEx"                             "$shadow_root/BepInEx"
 
-if [ ! -f "$shadow_bin" ] || [ "$executable_path" -nt "$shadow_bin" ]; then
+# Rebuild when the game binary changed, or when the copy lacks the JIT entitlement (a game update can
+# leave it with the original signature, and then .NET fails: "Failed to initialize CoreCLR").
+has_jit() { codesign -d --entitlements - "$1" 2>/dev/null | grep -q "com.apple.security.cs.allow-jit"; }
+if [ ! -f "$shadow_bin" ] || [ "$executable_path" -nt "$shadow_bin" ] || ! has_jit "$shadow_bin"; then
     echo "[arm64-launcher] building JIT-entitled shadow bundle at $shadow_app"
     mkdir -p "$shadow_app/Contents/MacOS"
     ln -sfn "$real_contents/PlugIns"    "$shadow_app/Contents/PlugIns"
     ln -sfn "$real_contents/Resources"  "$shadow_app/Contents/Resources"
     cp -f "$real_contents/Info.plist"   "$shadow_app/Contents/Info.plist"
+    rm -f "$shadow_bin"
     cp -f "$executable_path" "$shadow_bin"
+    # Strip the original signature first: re-signing over it can silently keep it.
+    codesign --remove-signature "$shadow_bin" 2>/dev/null || true
 
     ents="$(mktemp /tmp/fm26_ents.XXXXXX)"
     codesign -d --entitlements "$ents" --xml "$executable_path" 2>/dev/null || true
@@ -134,6 +140,10 @@ if [ ! -f "$shadow_bin" ] || [ "$executable_path" -nt "$shadow_bin" ]; then
         exit 1
     fi
     rm -f "$ents"
+    if ! has_jit "$shadow_bin"; then
+        echo "[arm64-launcher] ERROR: re-signed copy still lacks the JIT entitlement; BepInEx can't start" >&2
+        exit 1
+    fi
 fi
 # Pitchside: Frameworks as a real folder with arm64-only copies of universal dylibs.
 # Doorstop's plthook reads a dylib's import table assuming a single-architecture

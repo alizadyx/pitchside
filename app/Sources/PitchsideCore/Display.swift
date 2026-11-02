@@ -128,7 +128,12 @@ public enum PitchLayout {
             let n = group.count
             let spread: [Double] = n == 1 ? [b.x] : n == 2 ? [0.36, 0.64] : n == 3 ? [0.25, 0.5, 0.75]
                 : (0..<n).map { 0.15 + 0.7 * Double($0) / Double(n - 1) }
-            for (i, s) in group.enumerated() { out[s.label] = PitchPoint(x: spread[i], y: b.y) }
+            // Left to right by label ("LCB", "CB", "RCB"), not by slot order: presets list lines right to left.
+            func side(_ l: String) -> Int { l.hasPrefix("L") ? 0 : l.hasPrefix("R") ? 2 : 1 }
+            let ordered = group.enumerated().sorted { a, c in
+                side(a.element.label) != side(c.element.label) ? side(a.element.label) < side(c.element.label) : a.offset < c.offset
+            }.map(\.element)
+            for (i, s) in ordered.enumerated() { out[s.label] = PitchPoint(x: spread[i], y: b.y) }
         }
         return out
     }

@@ -139,6 +139,9 @@ final class TacticsTests: XCTestCase {
         let cp = FMPresets.all.first { $0.id == "CP01" }!
         XCTAssertEqual(cp.formation.slots[1].label, "RB")
         XCTAssertEqual(cp.formation.slots[2].label, "RCB")
+        // …and is still drawn on the right.
+        let pts = PitchLayout.points(for: cp.formation.slots)
+        XCTAssertLessThan(pts["LCB"]!.x, pts["RCB"]!.x)
 
         var t = Factory()
         let rows = rows(t.homeSquad()).filter { $0.person.club == "Home FC" }

@@ -117,6 +117,13 @@ if [ ! -f "$shadow_bin" ] || [ "$executable_path" -nt "$shadow_bin" ] || ! has_j
     ln -sfn "$real_contents/Resources"  "$shadow_app/Contents/Resources"
     cp -f "$real_contents/Info.plist"   "$shadow_app/Contents/Info.plist"
     rm -f "$shadow_bin"
+    # FM writes preloader_*.log next to its executable. Inside Contents/MacOS codesign treats
+    # them as unsigned subcomponents and refuses to sign, so move anything else out first.
+    mkdir -p "$shadow_root/logs"
+    for f in "$shadow_app/Contents/MacOS/"*; do
+        [ -e "$f" ] || continue
+        mv -f "$f" "$shadow_root/logs/" 2>/dev/null || rm -rf "$f"
+    done
     cp -f "$executable_path" "$shadow_bin"
     # Strip the original signature first: re-signing over it can silently keep it.
     codesign --remove-signature "$shadow_bin" 2>/dev/null || true

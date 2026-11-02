@@ -1,5 +1,5 @@
 {
-  "Version": "fm27-mac 2026-10-30: players, contracts, staff (incl. Authority), gender, team age limits (checked against in-game profiles)",
+  "Version": "fm27-mac 2026-10-30: players, contracts, staff (incl. Authority), gender, team age limits (checked against in-game profiles); player-coaches",
   "Verified": true,
   "EngineImage": "game_plugin",
   "ObjUid": "0x11C",
@@ -10,7 +10,8 @@
     "0xF8"
   ],
   "PlayerTypes": [
-    "N2db13ACTUAL_PLAYERE"
+    "N2db13ACTUAL_PLAYERE",
+    "N2db28ACTUAL_PLAYER_AND_NON_PLAYERE"
   ],
   "StaffTypes": [
     "N2db17ACTUAL_NON_PLAYERE"

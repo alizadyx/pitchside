@@ -13,6 +13,9 @@
     "N2db13ACTUAL_PLAYERE",
     "N2db28ACTUAL_PLAYER_AND_NON_PLAYERE"
   ],
+  "PlayerTypeOffsets": {
+    "N2db28ACTUAL_PLAYER_AND_NON_PLAYERE": "0x370"
+  },
   "StaffTypes": [
     "N2db17ACTUAL_NON_PLAYERE"
   ],

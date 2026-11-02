@@ -26,6 +26,9 @@ internal sealed class Offsets
     /// <summary>Optional C++ class names (from RTTI) that must match too; empty = offset only.</summary>
     public List<string> PlayerTypes { get; set; } = new();
     public List<string> StaffTypes { get; set; } = new();
+    /// <summary>Classes whose person sub-object sits at a different offset than the plain player class,
+    /// e.g. FM27's ACTUAL_PLAYER_AND_NON_PLAYER (player-coaches): player block, then staff block, then person.</summary>
+    public Dictionary<string, int> PlayerTypeOffsets { get; set; } = new();
 
     public StringLayout Strings { get; set; } = new();
     public PersonLayout Person { get; set; } = new();

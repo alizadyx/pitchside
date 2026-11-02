@@ -90,7 +90,9 @@ internal static partial class Dumper
                     teamObjs.TryAdd(at + (ulong)i * 8, 0);
                     continue;
                 }
-                bool isPlayer = playerSet.Contains(sub) && (playerTypes.Count == 0 || (ci.TypeName != null && playerTypes.Contains(ci.TypeName)));
+                bool isPlayer = ci.TypeName != null && cfg.PlayerTypeOffsets.TryGetValue(ci.TypeName, out int pinned)
+                    ? sub == pinned
+                    : playerSet.Contains(sub) && (playerTypes.Count == 0 || (ci.TypeName != null && playerTypes.Contains(ci.TypeName)));
                 bool isStaff = !isPlayer && staffSet.Contains(sub) && (staffTypes.Count == 0 || (ci.TypeName != null && staffTypes.Contains(ci.TypeName)));
                 if (!isPlayer && !isStaff) continue;
 

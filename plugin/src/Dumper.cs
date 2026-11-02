@@ -61,6 +61,7 @@ internal static partial class Dumper
         var vtCounts = new Dictionary<ulong, long>[Memory.Workers];
         for (int i = 0; i < vtCounts.Length; i++) vtCounts[i] = new();
         long skippedGender = 0, rejected = 0;
+        var rejects = new ConcurrentBag<string>();
 
         // How many bytes of each object we need in one read.
         int personSpan = new[] { cfg.Person.FirstName, cfg.Person.SecondName, cfg.Person.CommonName, cfg.Person.Nation,
@@ -107,13 +108,29 @@ internal static partial class Dumper
                 if (female ? db == 0 : db == 1) { Interlocked.Increment(ref skippedGender); continue; }
 
                 var r = isPlayer ? ReadPlayer(mem, cfg, blk, objStart, sub) : ReadStaff(mem, cfg, blk, objStart, sub);
-                if (r == null) { Interlocked.Increment(ref rejected); continue; }
+                if (r == null)
+                {
+                    Interlocked.Increment(ref rejected);
+                    if (rejects.Count < 3000)
+                        rejects.Add($"{(isPlayer ? "player" : "staff")} uid {uid}: ability out of range (CA {U16(blk, isPlayer ? cfg.Player.Ca : cfg.Staff.Ca)}, PA {U16(blk, isPlayer ? cfg.Player.Pa : cfg.Staff.Pa)}) name \"{PersonName(mem, cfg, person)}\" @ {objStart:X}");
+                    continue;
+                }
                 r.Uid = uid;
                 r.PersonAddr = person;
                 r.Sub = sub;
                 r.Gender = female ? 1 : 0;
                 ReadPersonCommon(mem, cfg, r, blk, person, sub, nationCache, teamCache, dateVotes, signedVotes);
-                if (string.IsNullOrEmpty(r.Name)) { Interlocked.Increment(ref rejected); continue; }
+                if (string.IsNullOrEmpty(r.Name))
+                {
+                    Interlocked.Increment(ref rejected);
+                    if (rejects.Count < 3000)
+                    {
+                        var pe = cfg.Person;
+                        string Raw(int off) => mem.FmString(person + (ulong)off, cfg.Strings.Nested, cfg.Strings.TextOffset) ?? "(null)";
+                        rejects.Add($"{(isPlayer ? "player" : "staff")} uid {uid}: no usable name (first \"{Raw(pe.FirstName)}\", second \"{Raw(pe.SecondName)}\", common \"{Raw(pe.CommonName)}\") CA {r.Ca} @ {objStart:X}");
+                    }
+                    continue;
+                }
                 (isPlayer ? players : staff).TryAdd(uid, r);
             }
         }, p => Status.Write("scanning", 0.9 * p, "Reading players and staff…", mode: "dump",
@@ -150,7 +167,7 @@ internal static partial class Dumper
         WriteProbe(mem, cfg, req, players.Values.Concat(staff.Values));
         if (!string.IsNullOrWhiteSpace(req.Club))
             WriteClubProbe(mem, cfg, req.Club.Trim(), players.Values, staff.Values, teamObjs.Keys.ToList(), squadSummary);
-        WriteDiagnostics(mem, cfg, vtCounts, players.Count, staff.Count, skippedGender, rejected, unread, sw.ElapsedMilliseconds);
+        WriteDiagnostics(mem, cfg, vtCounts, players.Count, staff.Count, skippedGender, rejected, unread, sw.ElapsedMilliseconds, rejects);
 
         Log.Info($"Scan done: {players.Count:N0} players, {staff.Count:N0} staff in {sw.ElapsedMilliseconds} ms");
         Status.Write("done", 1, players.Count < 100 ? "Scan finished, but very few players were found — calibration needed."
@@ -577,7 +594,8 @@ internal static partial class Dumper
     /// this list shows which classes exist, so the player/staff offsets can be corrected.
     /// </summary>
     private static void WriteDiagnostics(Memory mem, Offsets cfg, Dictionary<ulong, long>[] counts,
-                                         int players, int staff, long skippedGender, long rejected, long unread, long ms)
+                                         int players, int staff, long skippedGender, long rejected, long unread, long ms,
+                                         IEnumerable<string> rejects = null)
     {
         try
         {
@@ -596,6 +614,13 @@ internal static partial class Dumper
                 var ci = mem.Class(kv.Key);
                 var img = mem.ImageOf(kv.Key);
                 sb.AppendLine($"  {kv.Value,9:N0}  0x{ci.SubObjectOffset,-5:X}  {ci.TypeName ?? "?",-50}  {img?.FileName}");
+            }
+            if (rejects != null)
+            {
+                var list = rejects.OrderBy(x => x).ToList();
+                sb.AppendLine();
+                sb.AppendLine($"Rejected records ({list.Count:N0} listed):");
+                foreach (var x in list) sb.AppendLine("  " + x);
             }
             Paths.WriteAtomic(System.IO.Path.Combine(Paths.Dir, "diagnostics.txt"), sb.ToString());
         }

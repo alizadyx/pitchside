@@ -77,6 +77,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @Environment(Store.self) private var store
     @State private var section: SidebarItem? = .players
+    @State private var showFind = false
 
     var body: some View {
         @Bindable var store = store
@@ -117,6 +118,9 @@ struct ContentView: View {
             }
             .background(Theme.bg)
         }
+        .sheet(isPresented: $showFind) {
+            FindPlayerSheet().environment(store).preferredColorScheme(.dark)
+        }
         .sheet(isPresented: $store.showCompare) {
             CompareView().environment(store).preferredColorScheme(.dark)
         }
@@ -132,6 +136,13 @@ struct ContentView: View {
                 .help("Show men's or women's football (filters instantly)")
             }
             ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    showFind = true
+                } label: {
+                    Label("Find player", systemImage: "magnifyingglass")
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .help("Find any scanned player by name, ignoring every filter (⌘F)")
                 Button {
                     store.showCompare = true
                 } label: {
@@ -250,5 +261,74 @@ struct SettingsView: View {
         }
         .padding(20)
         .frame(width: 460)
+    }
+}
+
+
+/// Find any player in the scan by name, regardless of filters, squad or the Men/Women switch.
+struct FindPlayerSheet: View {
+    @Environment(Store.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var picked: UInt32?
+    @FocusState private var focused: Bool
+
+    private var results: [PlayerRow] {
+        let words = ShortlistImport.normalise(query).split(separator: " ")
+        guard !words.isEmpty, words.joined().count >= 2 else { return [] }
+        return Array(store.allPlayers.lazy
+            .filter { r in let n = ShortlistImport.normalise(r.name); return words.allSatisfy { n.contains($0) } }
+            .prefix(300))
+            .sorted { $0.ca > $1.ca }
+    }
+
+    private func team(_ r: PlayerRow) -> String {
+        var parts: [String] = []
+        if let t = r.person.tage { parts.append(t >= 100 ? "senior team" : "U\(t)") }
+        if let own = r.person.own, own != r.person.club { parts.append("on loan from \(own)") }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        let found = results
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                TextField("Player name (accents optional)", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focused)
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            Text(query.isEmpty ? "Searches all \(store.allPlayers.count.formatted()) scanned players, ignoring filters and the Men/Women switch."
+                 : "\(found.count == 300 ? "300+" : "\(found.count)") found")
+                .font(.caption).foregroundStyle(.secondary)
+            HSplitView {
+                List(found, selection: $picked) { r in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(r.name).fontWeight(.medium)
+                            Spacer()
+                            Text("CA \(r.ca)").monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        Text([r.club.isEmpty ? "Free agent" : r.club, team(r), "\(r.age)", r.person.nat ?? "", r.positions]
+                                .filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .tag(r.id)
+                }
+                .frame(minWidth: 320)
+                Group {
+                    if let id = picked, let row = store.playerRow(id) {
+                        ScrollView { PlayerDetail(row: row) }
+                    } else {
+                        Text(found.isEmpty ? "" : "Pick a player to see his profile").foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(minWidth: 420)
+            }
+        }
+        .padding(14)
+        .frame(width: 980, height: 640)
+        .onAppear { focused = true }
     }
 }

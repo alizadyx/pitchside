@@ -149,45 +149,48 @@ struct StaffView: View {
                 .width(min: 40, ideal: ColumnFit.width(store.staff.prefix(600).map(\.nation), header: "Country", max: 160), max: 220).customizationID("nation")
             TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
             TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
-            TableColumn(attrTitle, value: \.areaSortValue) { r in
-                if areaOn {
-                    HStack(spacing: 6) {
-                        AttrBox(value: Int(r.areaScore.rounded()))
-                        Text(String(format: "%.1f", r.areaScore)).monospacedDigit().foregroundStyle(.secondary)
-                    }
-                    .help(store.staffBests[store.staffFilter.area].map {
-                        String(format: "%.1f in %@; your best is %@ at %.1f", r.areaScore, store.staffFilter.area, $0.row.name, $0.score)
-                    } ?? String(format: "%.1f in %@", r.areaScore, store.staffFilter.area))
-                } else {
-                    HStack(spacing: 6) {
-                        AttrBox(value: r.selectedAttr).help(attrTitle)
-                        Text(r.selectedAttr > 0 ? AttributeGroups.staffWord(r.selectedAttr) : "")
-                            .foregroundStyle(.secondary).lineLimit(1)
+            // A table block takes at most 10 columns; Group lifts the limit.
+            Group {
+                TableColumn(attrTitle, value: \.areaSortValue) { r in
+                    if areaOn {
+                        HStack(spacing: 6) {
+                            AttrBox(value: Int(r.areaScore.rounded()))
+                            Text(String(format: "%.1f", r.areaScore)).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        .help(store.staffBests[store.staffFilter.area].map {
+                            String(format: "%.1f in %@; your best is %@ at %.1f", r.areaScore, store.staffFilter.area, $0.row.name, $0.score)
+                        } ?? String(format: "%.1f in %@", r.areaScore, store.staffFilter.area))
+                    } else {
+                        HStack(spacing: 6) {
+                            AttrBox(value: r.selectedAttr).help(attrTitle)
+                            Text(r.selectedAttr > 0 ? AttributeGroups.staffWord(r.selectedAttr) : "")
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        }
                     }
                 }
-            }
-            .width(min: 60, ideal: max(110, ColumnFit.header(attrTitle)), max: 220).customizationID("attr")
-            TableColumn("Interest", value: \.interestRank) { r in
-                if !r.interestKnown {
-                    Text("—").foregroundStyle(.tertiary)
-                } else if r.club == store.myClub {
-                    Text("Yours").foregroundStyle(.secondary)
-                } else if let d = r.doubt {
-                    Text("Unlikely").foregroundStyle(Theme.warn).help("Unlikely: \(d)")
-                } else {
-                    Text("Possible").foregroundStyle(Theme.good)
-                        .help("Reputation within reach of your club. An estimate: FM decides when you approach him.")
+                .width(min: 60, ideal: max(110, ColumnFit.header(attrTitle)), max: 220).customizationID("attr")
+                TableColumn("Interest", value: \.interestRank) { r in
+                    if !r.interestKnown {
+                        Text("—").foregroundStyle(.tertiary)
+                    } else if r.club == store.myClub {
+                        Text("Yours").foregroundStyle(.secondary)
+                    } else if let d = r.doubt {
+                        Text("Unlikely").foregroundStyle(Theme.warn).help("Unlikely: \(d)")
+                    } else {
+                        Text("Possible").foregroundStyle(Theme.good)
+                            .help("Reputation within reach of your club. An estimate: FM decides when you approach him.")
+                    }
                 }
+                .width(min: 56, ideal: 72, max: 100).customizationID("interest")
+                TableColumn("Wage/wk", value: \.wageSort) { r in
+                    Text(r.wage >= 0 ? store.money(r.wage) : "—").monospacedDigit().foregroundStyle(.secondary)
+                }
+                .width(min: 50, ideal: 70, max: 110).customizationID("wage")
+                TableColumn("Contract", value: \.expires) { r in
+                    Text(r.expires.isEmpty ? "—" : DateText.monthYear(r.expires)).foregroundStyle(.secondary)
+                }
+                .width(min: 54, ideal: 64, max: 80).customizationID("contract")
             }
-            .width(min: 56, ideal: 72, max: 100).customizationID("interest")
-            TableColumn("Wage/wk", value: \.wageSort) { r in
-                Text(r.wage >= 0 ? store.money(r.wage) : "—").monospacedDigit().foregroundStyle(.secondary)
-            }
-            .width(min: 50, ideal: 70, max: 110).customizationID("wage")
-            TableColumn("Contract", value: \.expires) { r in
-                Text(r.expires.isEmpty ? "—" : DateText.monthYear(r.expires)).foregroundStyle(.secondary)
-            }
-            .width(min: 54, ideal: 64, max: 80).customizationID("contract")
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
         .persistsColumns($columnLayout, table: "staff", store: store)

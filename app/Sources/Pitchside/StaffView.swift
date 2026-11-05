@@ -133,53 +133,36 @@ struct StaffView: View {
         @Bindable var store = store
         let areaOn = !store.staffFilter.area.isEmpty
         let attrTitle = areaOn ? store.staffFilter.area : AttributeGroups.label(store.staffColumnKey)
+        let sample = Array(store.staff.prefix(600))
+        let nameW: CGFloat = ColumnFit.width(sample.map(\.name), header: "Name", max: 300, medium: true)
+        let jobW: CGFloat = ColumnFit.width(sample.map(\.job), header: "Job", max: 220)
+        let clubW: CGFloat = ColumnFit.width(sample.map { $0.club.isEmpty ? "Free agent" : $0.club }, header: "Club", max: 260)
+        let nationW: CGFloat = ColumnFit.width(sample.map(\.nation), header: "Country", max: 160)
+        let attrW: CGFloat = max(110, ColumnFit.header(attrTitle))
         return Table(store.staff, selection: $selection, sortOrder: $store.staffSort, columnCustomization: $columnLayout) {
             TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
-                .width(min: 80, ideal: ColumnFit.width(store.staff.prefix(600).map(\.name), header: "Name", max: 300, medium: true))
+                .width(min: 80, ideal: nameW)
                 .customizationID("name").disabledCustomizationBehavior([.reorder, .visibility])
             TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 42).customizationID("age")
             TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }
-                .width(min: 50, ideal: ColumnFit.width(store.staff.prefix(600).map(\.job), header: "Job", max: 220), max: 300).customizationID("job")
+                .width(min: 50, ideal: jobW, max: 300).customizationID("job")
             TableColumn("Club", value: \.club) { r in
-                Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1).foregroundStyle(r.club.isEmpty ? Theme.green : .secondary)
+                Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1).foregroundStyle(r.club.isEmpty ? Theme.green : Color.secondary)
             }
-            .width(min: 60, ideal: ColumnFit.width(store.staff.prefix(600).map { $0.club.isEmpty ? "Free agent" : $0.club }, header: "Club", max: 260), max: 320)
+            .width(min: 60, ideal: clubW, max: 320)
             .customizationID("club")
             TableColumn("Country", value: \.nation) { r in Text(r.nation).lineLimit(1).foregroundStyle(.secondary) }
-                .width(min: 40, ideal: ColumnFit.width(store.staff.prefix(600).map(\.nation), header: "Country", max: 160), max: 220).customizationID("nation")
+                .width(min: 40, ideal: nationW, max: 220).customizationID("nation")
             TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
             TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
             // A table block takes at most 10 columns; Group lifts the limit.
             Group {
                 TableColumn(attrTitle, value: \.areaSortValue) { r in
-                    if areaOn {
-                        HStack(spacing: 6) {
-                            AttrBox(value: Int(r.areaScore.rounded()))
-                            Text(String(format: "%.1f", r.areaScore)).monospacedDigit().foregroundStyle(.secondary)
-                        }
-                        .help(store.staffBests[store.staffFilter.area].map {
-                            String(format: "%.1f in %@; your best is %@ at %.1f", r.areaScore, store.staffFilter.area, $0.row.name, $0.score)
-                        } ?? String(format: "%.1f in %@", r.areaScore, store.staffFilter.area))
-                    } else {
-                        HStack(spacing: 6) {
-                            AttrBox(value: r.selectedAttr).help(attrTitle)
-                            Text(r.selectedAttr > 0 ? AttributeGroups.staffWord(r.selectedAttr) : "")
-                                .foregroundStyle(.secondary).lineLimit(1)
-                        }
-                    }
+                    StaffScoreCell(row: r, area: store.staffFilter.area, attrTitle: attrTitle)
                 }
-                .width(min: 60, ideal: max(110, ColumnFit.header(attrTitle)), max: 220).customizationID("attr")
+                .width(min: 60, ideal: attrW, max: 220).customizationID("attr")
                 TableColumn("Interest", value: \.interestRank) { r in
-                    if !r.interestKnown {
-                        Text("—").foregroundStyle(.tertiary)
-                    } else if r.club == store.myClub {
-                        Text("Yours").foregroundStyle(.secondary)
-                    } else if let d = r.doubt {
-                        Text("Unlikely").foregroundStyle(Theme.warn).help("Unlikely: \(d)")
-                    } else {
-                        Text("Possible").foregroundStyle(Theme.good)
-                            .help("Reputation within reach of your club. An estimate: FM decides when you approach him.")
-                    }
+                    StaffInterestCell(row: r, myClub: store.myClub)
                 }
                 .width(min: 56, ideal: 72, max: 100).customizationID("interest")
                 TableColumn("Wage/wk", value: \.wageSort) { r in
@@ -207,6 +190,58 @@ struct StaffView: View {
         .onCopyCommand {
             store.copyStaffName(selection)
             return []
+        }
+    }
+}
+
+/// The extra column: score in the searched area, or the chosen attribute with its word.
+struct StaffScoreCell: View {
+    let row: StaffRow
+    let area: String
+    let attrTitle: String
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        if area.isEmpty {
+            HStack(spacing: 6) {
+                AttrBox(value: row.selectedAttr).help(attrTitle)
+                Text(row.selectedAttr > 0 ? AttributeGroups.staffWord(row.selectedAttr) : "")
+                    .foregroundStyle(.secondary).lineLimit(1)
+            }
+        } else {
+            let score: Double = row.areaScore
+            let rounded: Int = Int(score.rounded())
+            let label: String = String(format: "%.1f", score)
+            HStack(spacing: 6) {
+                AttrBox(value: rounded)
+                Text(label).monospacedDigit().foregroundStyle(.secondary)
+            }
+            .help(tip(score))
+        }
+    }
+
+    private func tip(_ score: Double) -> String {
+        let mine = String(format: "%.1f in %@", score, area)
+        guard let best = store.staffBests[area] else { return mine }
+        return mine + String(format: "; your best is %@ at %.1f", best.row.name, best.score)
+    }
+}
+
+/// Interest column: Yours, Possible or Unlikely (with the reason on hover).
+struct StaffInterestCell: View {
+    let row: StaffRow
+    let myClub: String
+
+    var body: some View {
+        if !row.interestKnown {
+            Text("—").foregroundStyle(.tertiary)
+        } else if row.club == myClub {
+            Text("Yours").foregroundStyle(.secondary)
+        } else if let d = row.doubt {
+            Text("Unlikely").foregroundStyle(Theme.warn).help("Unlikely: " + d)
+        } else {
+            Text("Possible").foregroundStyle(Theme.good)
+                .help("Reputation within reach of your club. An estimate: FM decides when you approach him.")
         }
     }
 }

@@ -78,6 +78,14 @@ extension PlayerFilter {
         shortlistOnly = s
     }
 
+    /// Same search criteria, ignoring the global switches (gender, shortlist mode).
+    public func sameSearch(as other: PlayerFilter) -> Bool {
+        var a = self, b = other
+        a.gender = 0; b.gender = 0
+        a.shortlistOnly = false; b.shortlistOnly = false
+        return a == b
+    }
+
     static func short(_ v: Int) -> String {
         switch v {
         case 1_000_000...: return String(format: v % 1_000_000 == 0 ? "%.0fM" : "%.1fM", Double(v) / 1_000_000)

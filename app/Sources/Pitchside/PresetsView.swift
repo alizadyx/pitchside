@@ -98,7 +98,7 @@ struct PresetsPane: View {
 
     /// Style lean: green when the squad leans towards what the style asks, red when away from it.
     private func leanColor(_ v: Double) -> Color {
-        v >= 1 ? .green : v >= 0.3 ? Color(red: 0.6, green: 0.8, blue: 0.3) : v > -0.3 ? .secondary : v > -1 ? .orange : .red
+        v >= 1 ? Theme.good : v >= 0.3 ? Theme.fair : v > -0.3 ? .secondary : v > -1 ? Theme.warn : Theme.bad
     }
 
     private func summary(_ pf: TacticsAdvisor.PresetFit) -> some View {
@@ -116,7 +116,7 @@ struct PresetsPane: View {
                 Stat(title: "Rating", value: "\(Int(TeamCompare.rating(fit.level).rounded()))", color: AttrColor.color(Int(fit.level.rounded())))
                     .help(TeamCompare.metric("rating")?.explanation ?? "")
                 Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
-                Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
+                Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? Theme.warn : Theme.good)
                 Stat(title: "Style fit", value: String(format: "%+.1f", pf.styleScore), color: leanColor(pf.styleScore))
                     .help("+ this style leans on your players' strengths more than your average preset does, − less. 0 = average for your squad. Quality is in the role scores.")
                 if let m = FMPresets.style(pf.preset.style)?.mentality {
@@ -158,7 +158,7 @@ struct PresetsPane: View {
                     HStack(spacing: 4) {
                         Text(p.player?.name ?? "—").lineLimit(1)
                         if p.player != nil && p.familiarity < 15 {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warn)
                                 .help("Not a natural \(Formations.positionName(p.slot.position)) (familiarity \(p.familiarity))")
                         }
                     }
@@ -166,7 +166,7 @@ struct PresetsPane: View {
                     HStack(spacing: 4) {
                         roleCell(p.slot.oop, p.oopScore, oopPos == p.slot.position ? nil : oopPos)
                         if p.player != nil && oopPos != p.slot.position && pf.oopFamiliarity[i] < 15 {
-                            Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                            Image(systemName: "exclamationmark.triangle").foregroundStyle(Theme.warn)
                                 .help("Drops to \(Formations.positionName(oopPos)) without the ball, where he isn't natural (familiarity \(pf.oopFamiliarity[i]))")
                         }
                     }
@@ -202,7 +202,7 @@ struct PresetsPane: View {
                             Text(d.attributes.map(AttributeGroups.label).joined(separator: ", "))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             if d.id == weakest && r.demands.count > 1 {
-                                Text("weakest").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                                Text("weakest").font(.caption2.weight(.semibold)).foregroundStyle(Theme.warn)
                             }
                         }
                     }

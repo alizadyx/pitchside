@@ -4,7 +4,7 @@ import SwiftUI
 struct StaffView: View {
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.staff.v2") private var columnLayout: TableColumnCustomization<StaffRow>
+    @State private var columnLayout: TableColumnCustomization<StaffRow> = ColumnLayouts.load("staff")
     @State private var selection: UInt32?
     @AppStorage("showStaffFilters") private var showFilters = true
     @AppStorage("staffMode") private var mode = 0     // 0 search, 1 recommendations for my club
@@ -86,11 +86,11 @@ struct StaffView: View {
                     }
                     Table(store.staff, selection: $selection, sortOrder: $store.staffSort, columnCustomization: $columnLayout) {
                         TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
-                            .width(min: 130, ideal: ColumnFit.width(store.staff.prefix(600).map(\.name), min: 130, max: 300, medium: true)).customizationID("name")
+                            .width(min: 80, ideal: ColumnFit.width(store.staff.prefix(600).map(\.name), header: "Name", max: 300, medium: true)).customizationID("name").disabledCustomizationBehavior([.reorder, .visibility])
                         TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 42).customizationID("age")
-                        TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }.width(min: 80, ideal: 140, max: 220).customizationID("job")
+                        TableColumn("Job", value: \.job) { r in Text(r.job).lineLimit(1) }.width(min: 50, ideal: ColumnFit.width(store.staff.prefix(600).map(\.job), header: "Job", max: 220), max: 300).customizationID("job")
                         TableColumn("Club", value: \.club) { r in Text(r.club).lineLimit(1).foregroundStyle(.secondary) }
-                            .width(min: 90, ideal: ColumnFit.width(store.staff.prefix(600).map(\.club), min: 90, max: 260), max: 260).customizationID("club")
+                            .width(min: 60, ideal: ColumnFit.width(store.staff.prefix(600).map(\.club), header: "Club", max: 260), max: 320).customizationID("club")
                         TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
                         TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                         TableColumn(AttributeGroups.label(store.staffColumnKey), value: \.selectedAttr) { r in
@@ -107,6 +107,7 @@ struct StaffView: View {
                         .width(min: 54, ideal: 64, max: 80).customizationID("contract")
                     }
                     .tableStyle(.inset(alternatesRowBackgrounds: true))
+                    .persistsColumns($columnLayout, table: "staff", store: store)
                     .scrollContentBackground(.hidden)
                     .contextMenu(forSelectionType: UInt32.self) { ids in
                         Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyStaffName(ids) }
@@ -261,7 +262,7 @@ struct StaffAdviceView: View {
                     Text(String(format: "yours: %.0f", a.bestScore)).monospacedDigit()
                         .foregroundStyle(AttrColor.color(Int(a.bestScore.rounded())))
                 } else {
-                    Text("nobody").foregroundStyle(.red)
+                    Text("nobody").foregroundStyle(Theme.bad)
                 }
             }
             if let b = a.best {
@@ -281,7 +282,7 @@ struct StaffAdviceView: View {
                                     .filter { !$0.isEmpty }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             if let d = c.doubt {
-                                Text("Unlikely: \(d)").font(.caption2).foregroundStyle(.orange)
+                                Text("Unlikely: \(d)").font(.caption2).foregroundStyle(Theme.warn)
                             }
                         }
                         Spacer(minLength: 4)

@@ -7,7 +7,7 @@ import SwiftUI
 struct PlayersView: View {
     let shortlistOnly: Bool
     @Environment(Store.self) private var store
-    @State private var selection: UInt32?
+    @State private var selection: Set<UInt32> = []
     @AppStorage("showFilters") private var showFilters = true
     @State private var showImport = false
     @State private var confirmClear = false
@@ -84,14 +84,14 @@ struct PlayersView: View {
                         .transition(.move(edge: .leading))
                     Divider()
                 }
-                PlayersTable(selection: $selection)
+                PlayersTable(selection: $selection, onShortlistScreen: shortlistOnly)
             }
         }
         .background(Theme.bg)
-        .inspector(isPresented: Binding(get: { selection != nil }, set: { if !$0 { selection = nil } })) {
+        .inspector(isPresented: Binding(get: { selection.count == 1 }, set: { if !$0 { selection = [] } })) {
             Group {
-                if let id = selection, let row = store.playerRow(id) {
-                    PlayerDetail(row: row) { selection = nil }
+                if selection.count == 1, let id = selection.first, let row = store.playerRow(id) {
+                    PlayerDetail(row: row) { selection = [] }
                 } else {
                     Text("Select a player").foregroundStyle(.secondary)
                 }
@@ -108,6 +108,8 @@ struct PlayersView: View {
             if !code.isEmpty { store.playerSort = [KeyPathComparator(\PlayerRow.selectedRoleScore, order: .reverse)] }
         }
         .onChange(of: store.playerSort) { store.resort() }
+        .onChange(of: selection) { store.selectionCount = selection.count }
+        .onDisappear { store.selectionCount = 0 }
         .onChange(of: store.rate) { store.refilter() }
     }
 
@@ -115,10 +117,12 @@ struct PlayersView: View {
 }
 
 struct PlayersTable: View {
-    @Binding var selection: UInt32?
+    @Binding var selection: Set<UInt32>
+    /// On the Shortlist screen Delete takes the selected players off the list.
+    var onShortlistScreen = false
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.players.v2") private var columnLayout: TableColumnCustomization<PlayerRow>
+    @State private var columnLayout: TableColumnCustomization<PlayerRow> = ColumnLayouts.load("players")
 
     var body: some View {
         @Bindable var store = store
@@ -131,38 +135,40 @@ struct PlayersTable: View {
                 }
                 .buttonStyle(.plain)
             }
-            .width(20).customizationID("star")
+            .width(20).customizationID("star").disabledCustomizationBehavior([.reorder, .visibility])
             TableColumn("Name", value: \.name) { r in
                 HStack(spacing: 5) {
                     Text(r.name).fontWeight(.medium).lineLimit(1)
                     if r.isNew {
-                        Text("NEW").font(.system(size: 9, weight: .heavy)).foregroundStyle(.black)
+                        Text("NEW").font(.system(size: 9, weight: .heavy)).foregroundStyle(.white)
                             .padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(Color.purple.opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
+                            .background(Theme.new, in: RoundedRectangle(cornerRadius: 3))
                     }
                     if store.compareIds.contains(r.id) {
                         Image(systemName: "rectangle.split.3x1.fill").font(.caption2).foregroundStyle(Theme.accent)
                     }
                 }
             }
-            .width(min: 140, ideal: ColumnFit.width(store.players.prefix(600).map(\.name), min: 140, max: 320, extra: 40, medium: true)).customizationID("name")
+            .width(min: 80, ideal: ColumnFit.width(store.players.prefix(600).map(\.name), header: "Name", max: 320,
+                                                   extra: store.players.prefix(600).contains(where: \.isNew) ? 36 : 0, medium: true)).customizationID("name").disabledCustomizationBehavior([.reorder, .visibility])
             TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }
                 .width(min: 30, ideal: 34, max: 40).customizationID("age")
             TableColumn("Position", value: \.positions) { r in
                 Text(r.positions).foregroundStyle(.secondary).lineLimit(1)
             }
-            .width(min: 60, ideal: ColumnFit.width(store.players.prefix(600).map(\.positions), min: 60, max: 180), max: 180).customizationID("position")
+            .width(min: 40, ideal: ColumnFit.width(store.players.prefix(600).map(\.positions), header: "Position", max: 180), max: 260).customizationID("position")
             TableColumn("Club", value: \.club) { r in
                 HStack(spacing: 4) {
                     Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1)
                         .foregroundStyle(r.club.isEmpty ? Color.secondary : Color.primary)
                     if let own = r.person.own {
-                        Text("loan").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                        Text("loan").font(.caption2.weight(.semibold)).foregroundStyle(Theme.warn)
                             .help("On loan from \(own)")
                     }
                 }
             }
-            .width(min: 90, ideal: ColumnFit.width(store.players.prefix(600).map(\.club), min: 90, max: 260, extra: 30), max: 260).customizationID("club")
+            .width(min: 60, ideal: ColumnFit.width(store.players.prefix(600).map { $0.club.isEmpty ? "Free agent" : $0.club }, header: "Club", max: 260,
+                                                   extra: store.players.prefix(600).contains { $0.person.own != nil } ? 30 : 0), max: 320).customizationID("club")
             TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }
                 .width(min: 32, ideal: 38, max: 44).customizationID("ca")
             TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }
@@ -182,20 +188,29 @@ struct PlayersTable: View {
                     Text(String(format: "%.1f", r.selectedRoleScore)).monospacedDigit()
                         .foregroundStyle(AttrColor.color(Int(r.selectedRoleScore.rounded())))
                 }
+                .help(store.roleWhy(store.filter.roleCode.isEmpty ? r.bestRole : store.filter.roleCode, r))
             }
-            .width(min: 56, ideal: 170, max: 240).customizationID("role")
+            .width(min: 40, ideal: store.filter.roleCode.isEmpty
+                   ? ColumnFit.width(store.players.prefix(600).map { Roles.role($0.bestRole)?.short ?? $0.bestRole }, header: roleTitle, max: 240, extra: 34)
+                   : ColumnFit.width(["00.0"], header: roleTitle, max: 120), max: 280).customizationID("role")
             TableColumnForEach(store.columns(for: "players")) { c in
                 TableColumn(c.shortTitle, value: \PlayerRow[extra: c.id]) { r in StatCell(column: c, row: r, store: store) }
                     .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
             }
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .persistsColumns($columnLayout, table: "players", store: store)
         .scrollContentBackground(.hidden)
         .background(Theme.bg)
         .contextMenu(forSelectionType: UInt32.self) { ids in
-            PlayerContextItems(ids: ids, store: store)
+            PlayerContextItems(ids: ids, store: store, onOpen: { selection = [$0] })
         } primaryAction: { ids in
-            if let id = ids.first { selection = id }
+            if let id = ids.first { selection = [id] }
+        }
+        .onDeleteCommand {
+            guard onShortlistScreen, !selection.isEmpty else { return }
+            store.removeFromShownShortlist(selection)
+            selection = []
         }
     }
 }
@@ -206,7 +221,7 @@ struct AbilityText: View {
         Text(value > 0 ? "\(value)" : "—")
             .monospacedDigit()
             .fontWeight(value >= 150 ? .bold : .medium)
-            .foregroundStyle(value >= 170 ? Theme.gold : value >= 140 ? Color(red: 0.4, green: 0.9, blue: 0.5)
+            .foregroundStyle(value >= 170 ? Theme.gold : value >= 140 ? Theme.good
                              : value >= 110 ? Color.primary : Color.secondary)
     }
 }
@@ -503,8 +518,8 @@ struct PlayerDetail: View {
     }
 
     private func devColor(_ d: DevelopmentOutlook) -> Color {
-        d.realisation >= 0.75 ? .green : d.realisation >= 0.55 ? Color(red: 0.75, green: 0.85, blue: 0.3)
-            : d.realisation >= 0.4 ? .orange : .red
+        d.realisation >= 0.75 ? Theme.good : d.realisation >= 0.55 ? Theme.fair
+            : d.realisation >= 0.4 ? Theme.warn : Theme.bad
     }
 
     private func interestCard(_ a: InterestAssessment) -> some View {
@@ -535,11 +550,11 @@ struct PlayerDetail: View {
                             Button("Copy Name") { store.copyText([p.n]) }
                         }
                         .help("Right-click to copy the name for FM's search")
-                    if row.isNew { Tag(text: "NEW", color: .purple) }
+                    if row.isNew { Tag(text: "NEW", color: Theme.new) }
                 }
                 Text(p.club ?? "Free agent").font(.headline)
                 if let own = p.own {
-                    Text("On loan from \(own)").font(.callout.weight(.medium)).foregroundStyle(.orange)
+                    Text("On loan from \(own)").font(.callout.weight(.medium)).foregroundStyle(Theme.warn)
                 }
                 if let d = p.div { Text(d).font(.callout).foregroundStyle(.secondary) }
                 Text(subtitle(p)).font(.callout).foregroundStyle(.secondary)
@@ -557,13 +572,13 @@ struct PlayerDetail: View {
             Stat(title: "Meta score", value: String(format: "%.1f", row.meta), color: AttrColor.color(Int(row.meta.rounded())))
             if row.growth != PlayerRow.noGrowth {
                 Stat(title: "CA growth", value: row.growth > 0 ? "+\(row.growth)" : "\(row.growth)",
-                     color: row.growth > 0 ? .green : row.growth < 0 ? .red : .secondary)
+                     color: row.growth > 0 ? Theme.good : row.growth < 0 ? Theme.bad : .secondary)
             }
             Stat(title: "Value", value: Money.format(p.val, symbol: sym, perGbp: rate))
             Stat(title: "Wage / week", value: Money.format(p.wage, symbol: sym, perGbp: rate))
             Stat(title: "Contract", value: p.exp.map { DateText.monthYear($0) } ?? "—")
-            if p.lst == true { Stat(title: "Status", value: "Listed", color: .orange) }
-            if p.nfs == true { Stat(title: "Status", value: "Not for sale", color: .red) }
+            if p.lst == true { Stat(title: "Status", value: "Listed", color: Theme.warn) }
+            if p.nfs == true { Stat(title: "Status", value: "Not for sale", color: Theme.bad) }
         }
     }
 
@@ -705,8 +720,8 @@ struct Tag: View {
     let text: String
     let color: Color
     var body: some View {
-        Text(text).font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-            .background(color.opacity(0.3), in: Capsule())
+        Text(text).font(.caption.bold()).foregroundStyle(color).padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
     }
 }
 
@@ -760,8 +775,8 @@ struct FlagChip: View {
             .font(.callout)
             .lineLimit(1)
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background((flag.good ? Color.green : Color.red).opacity(0.15), in: Capsule())
-            .foregroundStyle(flag.good ? Color.green : Color(red: 1, green: 0.45, blue: 0.4))
+            .background((flag.good ? Theme.good : Theme.bad).opacity(0.10), in: Capsule())
+            .foregroundStyle(flag.good ? Theme.good : Theme.bad)
             .help(flag.detail)
     }
 }

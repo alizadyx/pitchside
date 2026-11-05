@@ -148,7 +148,7 @@ struct TargetEditor: View {
                 }
             }
             Text("\(target.attributes.count) attributes entered")
-                .font(.caption).foregroundStyle(target.attributes.count >= 8 ? Color.green : Color.secondary)
+                .font(.caption).foregroundStyle(target.attributes.count >= 8 ? Theme.good : Color.secondary)
         }
     }
 }

@@ -89,6 +89,10 @@ final class Store {
         }
     }
     /// User-added columns per table ("players", "squad", "signings", "growth"), as StatColumn ids.
+    /// How many players are selected in the Players/Shortlist table (shown in the status bar).
+    var selectionCount = 0
+    /// Bumped by "Reset widths & order"; tables watch it and clear their saved layout.
+    var layoutResets: [String: Int] = [:]
     var columnSets: [String: [String]] = Store.loadJSON("columnSets") ?? StatColumns.defaults {
         didSet { Store.saveJSON(columnSets, "columnSets") }
     }
@@ -186,6 +190,16 @@ final class Store {
         return ScoreScale(reference: xi.map(\.meta).reduce(0, +) / Double(xi.count))
     }
     func scoreColor(_ v: Double) -> Color { RelColor.color(v, squadScale) }
+
+    /// Tooltip text explaining a role score for this player.
+    func roleWhy(_ code: String, _ row: PlayerRow) -> String {
+        Roles.explain(code, attrs: row.person.a ?? [], attrKeys: meta?.playerAttrKeys ?? [])
+    }
+
+    /// The role of the slot Signings is filling.
+    var signingRoleCode: String? {
+        squadReport?.slots.first { $0.slot.label == selectedSlot }?.slot.role
+    }
 
     /// Your players out on loan at other clubs.
     private(set) var loanedOut: [PlayerRow] = []
@@ -435,9 +449,38 @@ final class Store {
         if filter.shortlistOnly { refilter() }
     }
 
-    func exportShortlistCSV() -> String {
+    /// Stars or unstars several players at once (multi-select, right-click).
+    func setShortlisted(_ ids: Set<UInt32>, _ on: Bool) {
+        guard !ids.isEmpty else { return }
+        if on { shortlist.formUnion(ids) } else { shortlist.subtract(ids) }
+        UserDefaults.standard.set(shortlist.map { Int($0) }, forKey: "shortlist")
+        for i in allPlayers.indices where ids.contains(allPlayers[i].id) { allPlayers[i].shortlisted = on }
+        for i in players.indices where ids.contains(players[i].id) { players[i].shortlisted = on }
+        if filter.shortlistOnly { refilter() }
+        if signFromShortlist { refreshSuggestions() }
+    }
+
+    func removeFromFMShortlist(_ ids: Set<UInt32>) {
+        guard !ids.isEmpty else { return }
+        fmShortlist.subtract(ids)
+        UserDefaults.standard.set(fmShortlist.map { Int($0) }, forKey: "fmShortlist")
+        refilter()
+        if signFromShortlist { refreshSuggestions() }
+    }
+
+    /// Delete key on the Shortlist screen: takes the selected players off the list being shown.
+    func removeFromShownShortlist(_ ids: Set<UInt32>) {
+        if shortlistFromFM { removeFromFMShortlist(ids) } else { setShortlisted(ids, false) }
+    }
+
+    func copyCSV(_ ids: Set<UInt32>) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(exportShortlistCSV(only: ids), forType: .string)
+    }
+
+    func exportShortlistCSV(only ids: Set<UInt32>? = nil) -> String {
         var lines = ["Name,Age,Club,Positions,CA,PA,Value,Wage,Contract"]
-        for r in players {
+        for r in (ids == nil ? players : allPlayers) where ids?.contains(r.id) ?? true {
             let cells = [r.name, "\(r.age)", r.club, r.positions, "\(r.ca)", "\(r.pa)",
                          r.value >= 0 ? "\(r.value)" : "", r.wage >= 0 ? "\(r.wage)" : "", r.expires]
             lines.append(cells.map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }.joined(separator: ","))
@@ -592,6 +635,17 @@ final class Store {
     }
 
     func deletePreset(_ p: NamedFilter) { savedPresets.removeAll { $0.id == p.id } }
+
+    func updatePreset(_ p: NamedFilter) {
+        guard let i = savedPresets.firstIndex(where: { $0.id == p.id }) else { return }
+        savedPresets[i].filter = filter
+    }
+
+    func renamePreset(_ p: NamedFilter, to name: String) {
+        let n = name.trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty, let i = savedPresets.firstIndex(where: { $0.id == p.id }) else { return }
+        savedPresets[i].name = n
+    }
 
     // MARK: - Comparison
 

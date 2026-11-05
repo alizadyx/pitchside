@@ -73,7 +73,7 @@ struct FormationsPane: View {
                 Stat(title: "Rating", value: "\(Int(TeamCompare.rating(fit.level).rounded()))", color: AttrColor.color(Int(fit.level.rounded())))
                     .help(TeamCompare.metric("rating")?.explanation ?? "")
                 Stat(title: "Depth", value: String(format: "%.1f", fit.depth), color: AttrColor.color(Int(fit.depth.rounded())))
-                Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? .orange : .green)
+                Stat(title: "Out of position", value: "\(fit.outOfPosition)", color: fit.outOfPosition > 0 ? Theme.warn : Theme.good)
             }
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Button {
@@ -102,7 +102,7 @@ struct FormationsPane: View {
                     HStack(spacing: 4) {
                         Text(p.player?.name ?? "—").lineLimit(1)
                         if p.player != nil && p.familiarity < 15 {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warn)
                                 .help("Not a natural \(p.slot.position) (familiarity \(p.familiarity))")
                         }
                     }
@@ -171,19 +171,18 @@ struct TacticsPitch: View {
     private func marker(_ p: TacticsAdvisor.Pick) -> some View {
         VStack(spacing: 1) {
             Text(p.player.map { short($0.name) } ?? "—")
-                .font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                .font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
             Text(Roles.role(p.slot.role)?.name ?? p.slot.role)
                 .font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.gold).lineLimit(1).minimumScaleFactor(0.7)
             Text(Roles.role(p.slot.oop)?.name ?? "")
-                .font(.system(size: 8.5)).foregroundStyle(.white.opacity(0.7)).lineLimit(1).minimumScaleFactor(0.7)
+                .font(.system(size: 8.5)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
             Text(p.player == nil ? "empty" : String(format: "%.1f", p.score))
                 .font(.system(size: 10, weight: .bold)).monospacedDigit()
-                .foregroundStyle(p.player == nil ? Color.red : RelColor.color(p.score, scale))
+                .foregroundStyle(p.player == nil ? Theme.bad : RelColor.color(p.score, scale))
         }
         .padding(.horizontal, 5).padding(.vertical, 3)
         .frame(width: 104)
-        .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 7))
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(p.familiarity < 15 && p.player != nil ? Color.orange : .clear))
+        .pitchTile(outline: p.familiarity < 15 && p.player != nil ? Theme.warn : .clear)
     }
 
     private func short(_ n: String) -> String {
@@ -311,9 +310,9 @@ struct InstructionsPane: View {
                         .help("Copies one column, with its mentality and style, into your tactic")
                     }
                     HStack(spacing: 14) {
-                        legend(.green, "agrees with the preset")
-                        legend(.orange, "Pitchside would change it")
-                        legend(.blue, "Pitchside would add it")
+                        legend(Theme.good, "agrees with the preset")
+                        legend(Theme.warn, "Pitchside would change it")
+                        legend(Theme.info, "Pitchside would add it")
                         legend(.secondary.opacity(0.5), "no reason to change the preset")
                     }
                     .font(.caption).foregroundStyle(.secondary)
@@ -389,9 +388,9 @@ struct InstructionsPane: View {
                 let pre = presetIns[spec.name]
                 let (dot, why): (Color, String) = {
                     switch (pre, sug) {
-                    case let (p?, s?) where p == s.setting: return (.green, s.reason)
-                    case let (_?, s?): return (.orange, s.reason)
-                    case let (nil, s?): return (.blue, s.reason)
+                    case let (p?, s?) where p == s.setting: return (Theme.good, s.reason)
+                    case let (_?, s?): return (Theme.warn, s.reason)
+                    case let (nil, s?): return (Theme.info, s.reason)
                     case (_?, nil): return (.secondary.opacity(0.5), "Nothing in your squad argues against it.")
                     default: return (.clear, "")
                     }

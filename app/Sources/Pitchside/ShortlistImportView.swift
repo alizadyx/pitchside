@@ -44,7 +44,7 @@ struct ShortlistImportSheet: View {
                 Button { picking = true } label: { Label("Choose screenshots…", systemImage: "photo.on.rectangle") }
                 if busy { ProgressView().controlSize(.small); Text("Reading \(shots) screenshot\(shots == 1 ? "" : "s")…").foregroundStyle(.secondary) }
             }
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            if let error { Text(error).foregroundStyle(Theme.bad).font(.callout) }
             if !matches.isEmpty {
                 Text("\(found.count) players found\(unsure.isEmpty ? "" : ", \(unsure.count) unsure")\(missing.isEmpty ? "" : ", \(missing.count) not in your scan")")
                     .font(.callout.weight(.semibold))

@@ -70,7 +70,7 @@ private struct DepthCard: View {
             .help(roleHelp)
             Divider()
             if d.options.isEmpty {
-                Text("Nobody in the squad").font(.caption).foregroundStyle(.red)
+                Text("Nobody in the squad").font(.caption).foregroundStyle(Theme.bad)
             }
             ForEach(d.options) { o in
                 let here = starts[o.row.id] == d.slot.label
@@ -82,7 +82,7 @@ private struct DepthCard: View {
                             .foregroundStyle(elsewhere != nil ? HierarchicalShapeStyle.secondary : .primary)
                             .lineLimit(1)
                         if o.familiarity < SquadBuilder.naturalFamiliarity {
-                            Text("◐").font(.caption2).foregroundStyle(.orange)
+                            Text("◐").font(.caption2).foregroundStyle(Theme.warn)
                         }
                         Spacer(minLength: 4)
                         Text(String(format: "%.1f", o.score)).monospacedDigit().fontWeight(.semibold)
@@ -97,7 +97,7 @@ private struct DepthCard: View {
         }
         .padding(8)
         .frame(width: 200, alignment: .topLeading)
-        .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .pitchTile()
     }
 
     /// Role codes, as on the My tactic pitch ("IF / W"); full names on hover.

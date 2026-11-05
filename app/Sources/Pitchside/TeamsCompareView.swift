@@ -69,7 +69,7 @@ enum MetricText {
     /// Green for the top quarter of the league, red for the bottom quarter.
     static func rankColor(_ standing: Double?) -> Color {
         guard let s = standing else { return .primary }
-        return s <= 0.25 ? .green : s >= 0.75 ? .red : .primary
+        return s <= 0.25 ? Theme.good : s >= 0.75 ? Theme.bad : .primary
     }
 
     /// Difference from the league average, signed (+ = more).
@@ -90,7 +90,7 @@ enum MetricText {
     static func diffColor(_ m: TeamCompare.Metric, _ a: Double, _ b: Double) -> Color {
         let d = m.higherIsBetter ? a - b : b - a
         let threshold = m.attributeScale ? 0.3 : max(abs(b) * 0.05, 0.5)
-        return d > threshold ? .green : d < -threshold ? .red : .secondary
+        return d > threshold ? Theme.good : d < -threshold ? Theme.bad : .secondary
     }
 }
 
@@ -388,7 +388,7 @@ private struct HeadToHeadPane: View {
                     Text(String(format: "%.1f", l.theirs)).monospacedDigit().foregroundStyle(AttrColor.color(Int(l.theirs.rounded())))
                     let d = l.mine - l.theirs
                     Text(String(format: "%+.1f", d)).monospacedDigit().fontWeight(.semibold)
-                        .foregroundStyle(d > 0.3 ? .green : d < -0.3 ? .red : .secondary)
+                        .foregroundStyle(d > 0.3 ? Theme.good : d < -0.3 ? Theme.bad : .secondary)
                 }
                 .font(.callout)
             }

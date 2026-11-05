@@ -369,6 +369,36 @@ public enum Roles {
     public static let preferableWeight = 2.25
     public static let otherWeight = 0.5
 
+    /// "Work Rate" from "WorkRate".
+    public static func attributeName(_ key: String) -> String {
+        var out = ""
+        for ch in key {
+            if ch.isUppercase, !out.isEmpty { out.append(" ") }
+            out.append(ch)
+        }
+        return out
+    }
+
+    /// Plain-language reason for a role score, for tooltips: how it's built and which attributes lift or hold it back.
+    public static func explain(_ code: String, attrs: [UInt8], attrKeys: [String]) -> String {
+        guard let role = role(code), !attrs.isEmpty else { return "" }
+        let ai = Dictionary(attrKeys.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        func values(_ keys: [String]) -> [(String, Int)] {
+            keys.compactMap { k in ai[k].flatMap { $0 < attrs.count ? (attributeName(k), Int(attrs[$0])) : nil } }
+        }
+        let key = values(role.key).sorted { $0.1 > $1.1 }
+        let resolved = resolve(attrKeys: attrKeys, positionKeys: [])
+        let total = resolved.first { $0.role.code == code }.map { score($0, attrs: attrs) } ?? 0
+        func list(_ v: ArraySlice<(String, Int)>) -> String { v.map { "\($0.0) \($0.1)" }.joined(separator: ", ") }
+        var lines = ["\(role.label): \(String(format: "%.1f", total)) out of 20",
+                     "Weighted average of his attributes: key ×3.5, preferable ×2.25, the rest ×0.5."]
+        if !key.isEmpty {
+            lines.append("Strongest key: " + list(key.prefix(3)))
+            if key.count > 3 { lines.append("Weakest key: " + list(ArraySlice(key.suffix(2).reversed()))) }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// 1–20 score, one decimal.
     public static func score(_ r: Resolved, attrs: [UInt8]) -> Double {
         var sum = 0.0, w = 0.0

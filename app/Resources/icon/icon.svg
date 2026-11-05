@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2C4A73"/>
+      <stop offset="1" stop-color="#1B2638"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <g filter="url(#drop)">
+    <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+    <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#sheen)"/>
+  </g>
+  <!-- faint pitch: touchline frame and halfway line -->
+  <rect x="196" y="196" width="632" height="632" rx="22" fill="none" stroke="#F6F4EE" stroke-opacity="0.10" stroke-width="10"/>
+  <line x1="196" y1="456" x2="828" y2="456" stroke="#F6F4EE" stroke-opacity="0.10" stroke-width="10"/>
+  <!-- the P: touchline stem + centre-circle bowl -->
+  <g fill="none" stroke="#F6F4EE" stroke-linecap="round" stroke-linejoin="round" stroke-width="84">
+    <path d="M 392 316 L 392 726"/>
+    <path d="M 392 316 L 532 316 A 140 140 0 0 1 532 596 L 392 596"/>
+  </g>
+  <!-- centre spot -->
+  <circle cx="532" cy="456" r="36" fill="#5FA37C"/>
+</svg>

@@ -37,7 +37,7 @@ extension View {
 struct SquadView: View {
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.signings.v2") private var columnLayout: TableColumnCustomization<SquadBuilder.Suggestion>
+    @State private var columnLayout: TableColumnCustomization<SquadBuilder.Suggestion> = ColumnLayouts.load("signings")
     @State private var clubQuery = ""
     @State private var picked: UInt32?
     @State private var showSave = false
@@ -141,7 +141,7 @@ struct SquadView: View {
                           : "First team, youth and reserve teams are told apart by their contracts")
                     if store.teamsApproximate {
                         Label("Estimated — rescan for real teams", systemImage: "info.circle")
-                            .font(.caption).foregroundStyle(.orange)
+                            .font(.caption).foregroundStyle(Theme.warn)
                     }
                 }
                 if store.genderFilter == 0 {
@@ -310,12 +310,12 @@ struct SquadView: View {
         HStack(spacing: 8) {
             Text("\(n) positions")
                 .font(.callout)
-                .foregroundStyle(n == 11 ? Color.secondary : Color.orange)
+                .foregroundStyle(n == 11 ? Color.secondary : Theme.warn)
                 .help(n == 11 ? "" : "A starting XI has 11 positions")
             HStack(spacing: 8) {
-                legendDot(.green, "fine")
-                legendDot(.orange, "weak spot")
-                legendDot(.red, "big gap")
+                legendDot(Theme.good, "fine")
+                legendDot(Theme.warn, "weak spot")
+                legendDot(Theme.bad, "big gap")
             }
             .font(.caption).foregroundStyle(.secondary)
             .help("Circle colour: how far the starter is below your XI level (more than 1 point: weak spot; more than 2.5 or nobody: big gap)")
@@ -348,7 +348,7 @@ struct SquadView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 480)
-            if store.allPlayers.isEmpty { Text("Scan the game first.").foregroundStyle(.orange) }
+            if store.allPlayers.isEmpty { Text("Scan the game first.").foregroundStyle(Theme.warn) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -392,28 +392,31 @@ struct SquadView: View {
                         Text(s.row.name).fontWeight(.medium).lineLimit(1)
                         if let st = s.style {
                             Text(String(format: "style %+.1f", st)).font(.caption2.weight(.semibold)).monospacedDigit()
-                                .foregroundStyle(st >= 0.5 ? Color.green : st <= -0.5 ? Color.orange : Color.secondary)
+                                .foregroundStyle(st >= 0.5 ? Theme.good : st <= -0.5 ? Theme.warn : Color.secondary)
                                 .help("How well his attributes suit the target style's instructions in this position (0 = neutral). Signings are ranked by gain plus half of this.")
                         }
                     }
                 }
-                .width(min: 150, ideal: ColumnFit.width(store.suggestions.map(\.row.name), min: 150, max: 320, extra: store.planningTarget ? 100 : 44, medium: true)).customizationID("name")
+                .width(min: 90, ideal: ColumnFit.width(store.suggestions.map(\.row.name), header: "Name", max: 340,
+                                                       extra: 22 + (store.suggestions.contains { $0.style != nil } ? 72 : 0), medium: true)).customizationID("name").disabledCustomizationBehavior([.reorder, .visibility])
                 TableColumn("Age", value: \.age) { s in Text("\(s.row.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                 TableColumn("Nat", value: \.nat) { s in Text(s.nat).lineLimit(1).foregroundStyle(.secondary).help(s.nat) }
-                    .width(min: 50, ideal: ColumnFit.width(store.suggestions.map(\.nat), min: 50, max: 140), max: 140).customizationID("nat")
+                    .width(min: 36, ideal: ColumnFit.width(store.suggestions.map(\.nat), header: "Nat", max: 140), max: 200).customizationID("nat")
                 TableColumn("Club", value: \.club) { s in
                     Text(s.row.club.isEmpty ? "Free agent" : s.row.club + (s.row.person.own.map { " (loan from \($0))" } ?? ""))
                         .lineLimit(1).foregroundStyle(.secondary)
                         .help(s.row.person.own.map { "On loan at \(s.row.club); you'd buy him from \($0)" } ?? s.row.club)
                 }
-                .width(min: 90, ideal: ColumnFit.width(store.suggestions.map { $0.row.club.isEmpty ? "Free agent" : $0.row.club }, min: 90, max: 240), max: 240).customizationID("club")
+                .width(min: 60, ideal: ColumnFit.width(store.suggestions.map { $0.row.club.isEmpty ? "Free agent" : $0.row.club }, header: "Club", max: 260), max: 320).customizationID("club")
                 TableColumn("Role", value: \.score) { s in
                     Text(String(format: "%.1f", s.score)).monospacedDigit().foregroundStyle(store.scoreColor(s.score))
+                        .help(store.signingRoleCode.map { store.roleWhy($0, s.row) } ?? "How well he fits the role of this slot (1–20)")
                 }
                 .width(min: 36, ideal: 42, max: 50).customizationID("role")
                 TableColumn("Gain", value: \.gain) { s in
                     Text(String(format: "%+.1f", s.gain)).monospacedDigit().fontWeight(.semibold)
-                        .foregroundStyle(s.gain > 0 ? Color.green : s.gain < -0.05 ? Color.orange : Color.secondary)
+                        .foregroundStyle(s.gain > 0 ? Theme.good : s.gain < -0.05 ? Theme.warn : Color.secondary)
+                        .help(String(format: "Role score %.1f against your current starter in this slot: %+.1f. Positive means he'd be an upgrade.", s.score, s.gain))
                 }
                 .width(min: 40, ideal: 46, max: 54).customizationID("gain")
                 TableColumn("CA/PA", value: \.ca) { s in Text("\(s.row.ca)/\(s.row.pa)").monospacedDigit() }.width(min: 54, ideal: 60, max: 70).customizationID("ca-pa")
@@ -426,15 +429,16 @@ struct SquadView: View {
                           : Money.format(s.row.person.val, symbol: store.currency.symbol, perGbp: store.rate) + " · "
                             + Money.format(s.row.person.wage, symbol: store.currency.symbol, perGbp: store.rate)))
                         .monospacedDigit().lineLimit(1)
-                        .foregroundStyle(s.row.club.isEmpty ? Color.green : Color.primary)
+                        .foregroundStyle(s.row.club.isEmpty ? Theme.good : Color.primary)
                 }
-                .width(min: 90, ideal: 120, max: 170).customizationID("value-wage")
+                .width(min: 70, ideal: ColumnFit.width(store.suggestions.map { $0.row.club.isEmpty ? "Free transfer" : Money.format($0.row.person.val, symbol: store.currency.symbol, perGbp: store.rate) + " · " + Money.format($0.row.person.wage, symbol: store.currency.symbol, perGbp: store.rate) }, header: "Value · Wage", max: 220), max: 260).customizationID("value-wage")
                 TableColumnForEach(store.columns(for: "signings")) { c in
                     TableColumn(c.shortTitle, value: \SquadBuilder.Suggestion[extra: c.id]) { s in StatCell(column: c, row: s.row, store: store) }
                         .width(min: c.minWidth, ideal: c.idealWidth, max: c.maxWidth).customizationID(c.id)
                 }
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
+            .persistsColumns($columnLayout, table: "signings", store: store)
             .scrollContentBackground(.hidden)
             .contextMenu(forSelectionType: UInt32.self) { ids in
                 PlayerContextItems(ids: ids, store: store)
@@ -467,7 +471,7 @@ extension SquadView {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 4) {
                                         Text(u.slot.label).font(.caption.weight(.bold))
-                                        Text(String(format: "+%.1f", u.suggestion.gain)).font(.caption.bold()).foregroundStyle(.green)
+                                        Text(String(format: "+%.1f", u.suggestion.gain)).font(.caption.bold()).foregroundStyle(Theme.good)
                                     }
                                     Text(u.suggestion.row.name).font(.callout).lineLimit(1)
                                     Text(u.suggestion.row.club.isEmpty ? "Free agent" : u.suggestion.row.club)
@@ -499,14 +503,14 @@ struct ClubXICard: View {
                     Spacer()
                     Text(String(format: "%.1f vs first team %.1f (%+.1f)", p.club, p.first, p.club - p.first))
                         .font(.callout).monospacedDigit()
-                        .foregroundStyle(p.club - p.first > 0.05 ? .green : .secondary)
+                        .foregroundStyle(p.club - p.first > 0.05 ? Theme.good : .secondary)
                 }
                 if p.promotions.isEmpty {
                     Text("Nobody outside the first team would get into this XI.").font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(p.promotions) { pr in
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Image(systemName: "arrow.up.circle.fill").foregroundStyle(.green)
+                        Image(systemName: "arrow.up.circle.fill").foregroundStyle(Theme.good)
                         Text("\(pr.player.name) (\(team(pr.player))) would start at \(pr.slot): "
                              + String(format: "%.1f", pr.score)
                              + (pr.replaces.map { " vs \($0.person.lastName) " + String(format: "%.1f", pr.replacedScore) } ?? ""))
@@ -531,7 +535,7 @@ struct MySquadView: View {
     @Binding var picked: UInt32?
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.squad.v2") private var columnLayout: TableColumnCustomization<PlayerRow>
+    @State private var columnLayout: TableColumnCustomization<PlayerRow> = ColumnLayouts.load("squad")
 
     var body: some View {
         @Bindable var store = store
@@ -540,7 +544,7 @@ struct MySquadView: View {
                 Text("XI = starting position in your formation").font(.caption).foregroundStyle(.tertiary)
                 if !store.loanedOut.isEmpty {
                     Label("\(store.loanedOut.count) out on loan", systemImage: "arrow.up.forward.circle")
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(.caption).foregroundStyle(Theme.warn)
                         .help(store.loanedOut.map { "\($0.name) (CA \($0.ca)) at \($0.club)" }.joined(separator: "\n"))
                 }
                 Spacer()
@@ -555,17 +559,18 @@ struct MySquadView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .width(20).customizationID("star")
+                .width(20).customizationID("star").disabledCustomizationBehavior([.reorder, .visibility])
                 TableColumn("Name", value: \.name) { r in
                     HStack(spacing: 4) {
                         Text(r.name).fontWeight(.medium).lineLimit(1)
                         if let own = r.person.own {
-                            Text("loan").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                            Text("loan").font(.caption2.weight(.semibold)).foregroundStyle(Theme.warn)
                                 .help("On loan from \(own)")
                         }
                     }
                 }
-                    .width(min: 130, ideal: ColumnFit.width(store.squadRows.map(\.name), min: 130, max: 300, extra: 60, medium: true)).customizationID("name")
+                    .width(min: 80, ideal: ColumnFit.width(store.squadRows.map(\.name), header: "Name", max: 300,
+                                                           extra: store.squadRows.contains { $0.person.own != nil } ? 30 : 0, medium: true)).customizationID("name").disabledCustomizationBehavior([.reorder, .visibility])
                 TableColumn("XI", value: \PlayerRow[extra: "xi"]) { r in
                     let t = store.squadRoleText[r.id]
                     Text(t ?? "—").lineLimit(1)
@@ -573,22 +578,22 @@ struct MySquadView: View {
                         .foregroundStyle(t == nil ? Color.secondary.opacity(0.6)
                                          : (t ?? "").contains("backup") ? Color.secondary : Theme.accent)
                 }
-                .width(min: 50, ideal: 86, max: 120).customizationID("xi")
+                .width(min: 30, ideal: ColumnFit.width(store.squadRows.compactMap { store.squadRoleText[$0.id] }, header: "XI", max: 160, medium: true), max: 200).customizationID("xi")
                 TableColumn("Age", value: \.age) { r in Text("\(r.age)").monospacedDigit() }
                     .width(min: 30, ideal: 34, max: 40).customizationID("age")
                 TableColumn("Position", value: \.positions) { r in
                     Text(r.positions).foregroundStyle(.secondary).lineLimit(1)
                 }
-                .width(min: 60, ideal: ColumnFit.width(store.squadRows.map(\.positions), min: 60, max: 180), max: 180).customizationID("position")
+                .width(min: 40, ideal: ColumnFit.width(store.squadRows.map(\.positions), header: "Position", max: 180), max: 260).customizationID("position")
                 TableColumn("Best role", value: \.bestRoleScore) { r in
                     HStack(spacing: 4) {
                         Text(Roles.role(r.bestRole)?.short ?? r.bestRole).foregroundStyle(.secondary).lineLimit(1)
-                            .help(Roles.role(r.bestRole)?.name ?? r.bestRole)
                         Text(String(format: "%.1f", r.bestRoleScore)).monospacedDigit()
                             .foregroundStyle(store.scoreColor(r.bestRoleScore))
                     }
+                    .help(store.roleWhy(r.bestRole, r))
                 }
-                .width(min: 90, ideal: 170, max: 240).customizationID("best-role")
+                .width(min: 50, ideal: ColumnFit.width(store.squadRows.map { Roles.role($0.bestRole)?.short ?? $0.bestRole }, header: "Best role", max: 240, extra: 34), max: 280).customizationID("best-role")
                 TableColumn("CA", value: \.ca) { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
                 TableColumn("PA", value: \.pa) { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                 TableColumn("Contract", value: \.expires) { r in
@@ -603,6 +608,7 @@ struct MySquadView: View {
                 }
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
+            .persistsColumns($columnLayout, table: "squad", store: store)
             .scrollContentBackground(.hidden)
             .contextMenu(forSelectionType: UInt32.self) { ids in
                 PlayerContextItems(ids: ids, store: store)
@@ -643,28 +649,28 @@ struct SlotMarker: View {
     var scale: ScoreScale? = nil
 
     var body: some View {
-        let colour: Color = a.weakness > 2.5 ? .red : a.weakness > 1 ? .orange : .green
+        let colour: Color = a.weakness > 2.5 ? Theme.bad : a.weakness > 1 ? Theme.warn : Theme.good
         VStack(spacing: 2) {
             ZStack {
-                Circle().fill(colour.opacity(0.9)).frame(width: 30, height: 30)
-                Circle().stroke(selected ? Color.white : Color.black.opacity(0.4), lineWidth: selected ? 3 : 1).frame(width: 30, height: 30)
-                Text(a.slot.label).font(.system(size: 9, weight: .heavy)).foregroundStyle(.black)
+                Circle().fill(colour).frame(width: 28, height: 28)
+                Circle().stroke(selected ? Theme.accent : Color.white.opacity(0.9), lineWidth: selected ? 3 : 1.5).frame(width: 28, height: 28)
+                Text(a.slot.label).font(.system(size: 9, weight: .heavy)).foregroundStyle(.white)
             }
             Text(a.starter.map { shortName($0.name) } ?? "—")
                 .font(.system(size: 10.5, weight: .semibold))
                 .lineLimit(1)
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.ink)
             HStack(spacing: 4) {
                 Text(a.slot.oop.isEmpty ? a.slot.role : "\(a.slot.role)/\(a.slot.oop.dropFirst())")
-                    .font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                    .font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1)
                 Text(a.starter == nil ? "empty" : String(format: "%.1f", a.starterScore))
                     .font(.system(size: 10, weight: .bold)).monospacedDigit()
-                    .foregroundStyle(a.starter == nil ? Color.red : RelColor.color(a.starterScore, scale))
+                    .foregroundStyle(a.starter == nil ? Theme.bad : RelColor.color(a.starterScore, scale))
             }
         }
         .padding(.horizontal, 5).padding(.vertical, 3)
         .frame(width: 92)
-        .background(Color.black.opacity(selected ? 0.55 : 0.35), in: RoundedRectangle(cornerRadius: 7))
+        .pitchTile(selected: selected)
         .contentShape(Rectangle())
     }
 
@@ -731,10 +737,10 @@ struct SlotCard: View {
             line("1st choice", a.starter, a.starterScore)
             line("Backup", a.backup, a.backupScore)
             ForEach(a.issues, id: \.self) { i in
-                Label(i, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(.orange)
+                Label(i, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(Theme.warn)
             }
             if a.issues.isEmpty {
-                Label("Covered", systemImage: "checkmark.circle.fill").font(.callout).foregroundStyle(.green)
+                Label("Covered", systemImage: "checkmark.circle.fill").font(.callout).foregroundStyle(Theme.good)
             }
             if let r = a.starter, let i = store.slotIndex(a.slot.label) { roleCheck(r, i) }
             if let report = store.squadReport, let meta = store.meta {
@@ -747,7 +753,7 @@ struct SlotCard: View {
                             Text(o.row.name).lineLimit(1)
                             Text("\(o.row.age)").foregroundStyle(.secondary)
                             if o.familiarity < 15 {
-                                Text("accomplished").font(.caption2).foregroundStyle(.orange)
+                                Text("accomplished").font(.caption2).foregroundStyle(Theme.warn)
                                     .help("Can play here but isn't a natural (familiarity \(o.familiarity))")
                             }
                             Spacer()
@@ -857,7 +863,7 @@ struct SlotCard: View {
 struct RadarView: View {
     @Environment(Store.self) private var store
     /// Column order, visibility and widths; drag headers to reorder, right-click a header to hide.
-    @SceneStorage("table.growth.v2") private var columnLayout: TableColumnCustomization<PlayerRow>
+    @State private var columnLayout: TableColumnCustomization<PlayerRow> = ColumnLayouts.load("growth")
     @State private var mode = 0
     @State private var picked: UInt32?
 
@@ -873,9 +879,9 @@ struct RadarView: View {
             HStack(spacing: 10) {
                 Stat(title: "Compared with", value: store.referenceLabel.isEmpty ? "—" : store.referenceLabel)
                     .help(store.referenceLabel)
-                Stat(title: "Players who improved", value: risers.count.formatted(), color: .green)
+                Stat(title: "Players who improved", value: risers.count.formatted(), color: Theme.good)
                 Stat(title: "Biggest rise", value: risers.first.map { "+\($0.growth) \($0.name)" } ?? "—")
-                Stat(title: "New since last scan", value: regens.count.formatted(), color: .purple)
+                Stat(title: "New since last scan", value: regens.count.formatted(), color: Theme.new)
                 Stat(title: "Best new potential", value: regens.first.map { "\($0.pa) \($0.name)" } ?? "—", color: Theme.gold)
             }
             .padding(12)
@@ -913,19 +919,19 @@ struct RadarView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .width(20).customizationID("star")
-                    TableColumn("Name") { r in Text(r.name).fontWeight(.medium).lineLimit(1) }.width(min: 140, ideal: ColumnFit.width(rows.map(\.name), min: 140, max: 300, medium: true)).customizationID("name")
+                    .width(20).customizationID("star").disabledCustomizationBehavior([.reorder, .visibility])
+                    TableColumn("Name") { r in Text(r.name).fontWeight(.medium).lineLimit(1) }.width(min: 80, ideal: ColumnFit.width(rows.map(\.name), header: "Name", max: 300, medium: true)).customizationID("name").disabledCustomizationBehavior([.reorder, .visibility])
                     TableColumn("Age") { r in Text("\(r.age)").monospacedDigit() }.width(min: 30, ideal: 34, max: 40).customizationID("age")
                     TableColumn("Position") { r in Text(r.positions).foregroundStyle(.secondary).lineLimit(1) }
-                        .width(min: 60, ideal: ColumnFit.width(rows.map(\.positions), min: 60, max: 160), max: 160).customizationID("position")
+                        .width(min: 40, ideal: ColumnFit.width(rows.map(\.positions), header: "Position", max: 160), max: 240).customizationID("position")
                     TableColumn("Club") { r in Text(r.club.isEmpty ? "Free agent" : r.club).lineLimit(1) }
-                        .width(min: 90, ideal: ColumnFit.width(rows.map { $0.club.isEmpty ? "Free agent" : $0.club }, min: 90, max: 240), max: 240).customizationID("club")
+                        .width(min: 60, ideal: ColumnFit.width(rows.map { $0.club.isEmpty ? "Free agent" : $0.club }, header: "Club", max: 260), max: 320).customizationID("club")
                     TableColumn("CA") { r in AbilityText(value: r.ca) }.width(min: 32, ideal: 38, max: 44).customizationID("ca")
                     TableColumn("PA") { r in AbilityText(value: r.pa) }.width(min: 32, ideal: 38, max: 44).customizationID("pa")
                     TableColumn("Growth") { r in
                         Text(r.growth == PlayerRow.noGrowth ? "new" : (r.growth > 0 ? "+\(r.growth)" : "\(r.growth)"))
                             .monospacedDigit().fontWeight(.semibold)
-                            .foregroundStyle(r.growth == PlayerRow.noGrowth ? Color.purple : r.growth > 0 ? Color.green : Color.secondary)
+                            .foregroundStyle(r.growth == PlayerRow.noGrowth ? Theme.new : r.growth > 0 ? Theme.good : Color.secondary)
                     }
                     .width(min: 40, ideal: 50, max: 60).customizationID("growth")
                     TableColumn("Meta") { r in
@@ -938,6 +944,7 @@ struct RadarView: View {
                     }
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: true))
+                .persistsColumns($columnLayout, table: "growth", store: store)
                 .scrollContentBackground(.hidden)
                 .contextMenu(forSelectionType: UInt32.self) { ids in
                     PlayerContextItems(ids: ids, store: store)
@@ -1079,7 +1086,7 @@ struct BarRow: View {
                     .frame(height: 8)
                     Text(v.map { decimals == 0 ? "\(Int($0))" : String(format: "%.\(decimals)f", $0) } ?? "—")
                         .font(.callout.weight(isBest ? .bold : .regular)).monospacedDigit()
-                        .foregroundStyle(isBest ? Color.white : Color.secondary)
+                        .foregroundStyle(isBest ? Color.primary : Color.secondary)
                         .frame(width: 40, alignment: .trailing)
                 }
                 .frame(maxWidth: .infinity)
@@ -1110,10 +1117,10 @@ struct InterestBadge: View {
 extension InterestLevel {
     var color: Color {
         switch self {
-        case .interested: .green
-        case .persuadable: Color(red: 0.75, green: 0.85, blue: 0.3)
-        case .doubtful: .orange
-        case .unlikely: .red
+        case .interested: Theme.good
+        case .persuadable: Theme.fair
+        case .doubtful: Theme.warn
+        case .unlikely: Theme.bad
         }
     }
 }
@@ -1182,11 +1189,11 @@ struct SquadTimelineView: View {
             let old = s.age >= 31
             Button { picked = s.id } label: {
                 HStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2).fill(old ? Color.orange : Color.green).frame(width: 4, height: 26)
+                    RoundedRectangle(cornerRadius: 2).fill(old ? Theme.warn : Theme.good).frame(width: 4, height: 26)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(s.name).lineLimit(1).foregroundStyle(.primary)
                         HStack(spacing: 6) {
-                            Text("\(s.age)").foregroundStyle(old ? Color.orange : Color.secondary)
+                            Text("\(s.age)").foregroundStyle(old ? Theme.warn : Color.secondary)
                             Text(String(format: "%.1f", a.starterScore))
                                 .foregroundStyle(store.scoreColor(a.starterScore))
                             if let e = s.person.exp, !e.isEmpty { Text("to \(DateText.monthYear(e))").foregroundStyle(.tertiary) }
@@ -1205,7 +1212,7 @@ struct SquadTimelineView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(s.name).lineLimit(1).foregroundStyle(.secondary)
                         Text("contract ends \(DateText.monthYear(s.person.exp ?? "")) — renew?")
-                            .font(.caption).foregroundStyle(.orange)
+                            .font(.caption).foregroundStyle(Theme.warn)
                     }
                 }
                 .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
@@ -1215,8 +1222,8 @@ struct SquadTimelineView: View {
             .help("Nobody under contract plays here this season. Renewing \(s.name) would keep it covered (score \(String(format: "%.1f", r.starterScore))).")
         } else {
             HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 2).fill(Color.red).frame(width: 4, height: 26)
-                Text("Nobody").foregroundStyle(.red)
+                RoundedRectangle(cornerRadius: 2).fill(Theme.bad).frame(width: 4, height: 26)
+                Text("Nobody").foregroundStyle(Theme.bad)
             }
             .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
         }
@@ -1241,10 +1248,10 @@ struct TargetGapCard: View {
                              "Best XI level in your own tactic, for comparison")
                     }
                     if let st = tf.style {
-                        stat("Style fit", String(format: "%+.1f", st.score), st.score >= 0.3 ? .green : st.score <= -0.3 ? .orange : .secondary,
+                        stat("Style fit", String(format: "%+.1f", st.score), st.score >= 0.3 ? Theme.good : st.score <= -0.3 ? Theme.warn : .secondary,
                              "How your XI's attributes suit the preset's team instructions, against what their positions usually need (0 = neutral)")
                     }
-                    stat("Out of position", "\(tf.fit.outOfPosition)", tf.fit.outOfPosition > 0 ? .orange : .green,
+                    stat("Out of position", "\(tf.fit.outOfPosition)", tf.fit.outOfPosition > 0 ? Theme.warn : Theme.good,
                          "XI players not natural at their in-possession position")
                 }
                 if !gaps.isEmpty {

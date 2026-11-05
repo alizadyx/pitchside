@@ -2,31 +2,48 @@ import AppKit
 import PitchsideCore
 import SwiftUI
 
-/// FM-style dark palette and the small building blocks shared by every screen.
+/// Pitchside palette: off-white paper, ink blue, a restrained green.
+/// Every text colour here keeps at least ~4.5:1 contrast on the off-white background.
 enum Theme {
-    static let bg = Color(red: 0.075, green: 0.082, blue: 0.11)
-    static let panel = Color(red: 0.11, green: 0.12, blue: 0.16)
-    static let panelAlt = Color(red: 0.15, green: 0.16, blue: 0.21)
-    static let stroke = Color.white.opacity(0.08)
-    static let accent = Color(red: 0.36, green: 0.55, blue: 1.0)
-    static let accentSoft = Color(red: 0.36, green: 0.55, blue: 1.0).opacity(0.22)
-    static let pitch = Color(red: 0.13, green: 0.36, blue: 0.22)
-    static let pitchDark = Color(red: 0.10, green: 0.30, blue: 0.18)
-    static let gold = Color(red: 1.0, green: 0.78, blue: 0.25)
+    static let bg = Color(hex: 0xF6F4EE)          // off-white canvas
+    static let panel = Color(hex: 0xFFFFFF)       // cards on the canvas
+    static let panelAlt = Color(hex: 0xEEEBE3)    // wells, empty boxes, inactive
+    static let ink = Color(hex: 0x1B2638)         // headings, primary marks
+    static let stroke = Color(hex: 0x1B2638).opacity(0.10)
+    static let accent = Color(hex: 0x2C4A73)      // ink blue: selection, active filters, buttons
+    static let accentSoft = Color(hex: 0x2C4A73).opacity(0.10)
+    static let green = Color(hex: 0x3E7A5A)       // brand green, used sparingly
+    static let greenSoft = Color(hex: 0x3E7A5A).opacity(0.12)
+    static let pitch = Color(hex: 0x4F7D60)
+    static let pitchDark = Color(hex: 0x48745A)
+    static let gold = Color(hex: 0x8A600B)        // stars, world class
+    // Meaning colours (text-safe on the canvas)
+    static let good = Color(hex: 0x2E7350)
+    static let fair = Color(hex: 0x5A7424)
+    static let warn = Color(hex: 0xA55B0E)
+    static let bad = Color(hex: 0xB23A32)
+    static let info = Color(hex: 0x2F5C9A)
+    static let new = Color(hex: 0x6A4C9C)
     /// Colours for up to three compared players.
-    static let series: [Color] = [Color(red: 0.36, green: 0.62, blue: 1.0), Color(red: 1.0, green: 0.6, blue: 0.2),
-                                  Color(red: 0.92, green: 0.35, blue: 0.75)]
+    static let series: [Color] = [Color(hex: 0x2F5C9A), Color(hex: 0xC27A1A), Color(hex: 0x9A3F7A)]
 }
 
-/// Colours for ScoreScale tiers: green above the reference, plain around it, orange and red below.
+extension Color {
+    init(hex: UInt32, alpha: Double = 1) {
+        self.init(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
+                  blue: Double(hex & 0xFF) / 255, opacity: alpha)
+    }
+}
+
+/// Colours for ScoreScale tiers: green above the reference, plain around it, amber and red below.
 enum RelColor {
     static func color(_ tier: Int) -> Color {
         switch tier {
-        case 2...: return Color(red: 0.35, green: 0.85, blue: 0.45)
-        case 1: return Color(red: 0.62, green: 0.82, blue: 0.48)
+        case 2...: return Theme.good
+        case 1: return Theme.fair
         case 0: return .primary
-        case -1: return .orange
-        default: return Color(red: 0.95, green: 0.35, blue: 0.3)
+        case -1: return Theme.warn
+        default: return Theme.bad
         }
     }
 
@@ -37,24 +54,31 @@ enum RelColor {
 }
 
 enum AttrColor {
-    /// FM-like bands: weak red, ordinary amber, good green, elite bright green.
+    /// FM-like bands: weak red, ordinary amber, good olive, elite green. Dark enough to read as text.
     static func color(_ v: Int) -> Color {
         switch v {
         case ..<1: return .secondary
-        case 1...5: return Color(red: 0.93, green: 0.36, blue: 0.33)
-        case 6...10: return Color(red: 0.95, green: 0.68, blue: 0.27)
-        case 11...15: return Color(red: 0.62, green: 0.84, blue: 0.32)
-        default: return Color(red: 0.25, green: 0.9, blue: 0.5)
+        case 1...5: return Theme.bad
+        case 6...10: return Theme.warn
+        case 11...15: return Theme.fair
+        default: return Theme.good
         }
     }
 }
 
 extension View {
-    /// Rounded dark card.
+    /// Rounded card on the canvas.
     func fmCard(padding: CGFloat = 12) -> some View {
         self.padding(padding)
             .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.stroke))
+    }
+
+    /// Small white tile that floats on the pitch drawing (player markers).
+    func pitchTile(selected: Bool = false, outline: Color = .clear) -> some View {
+        self.background(Theme.panel.opacity(selected ? 1 : 0.94), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(selected ? Theme.accent : outline, lineWidth: selected ? 2 : 1.2))
+            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
     }
 }
 
@@ -66,9 +90,9 @@ struct AttrBox: View {
         Text(value > 0 ? "\(value)" : "–")
             .font(.system(size: 12.5, weight: .bold, design: .rounded))
             .monospacedDigit()
-            .foregroundStyle(value > 0 ? Color.black.opacity(0.85) : Color.secondary)
+            .foregroundStyle(value > 0 ? AttrColor.color(value) : Color.secondary)
             .frame(width: width, height: 19)
-            .background(value > 0 ? AttrColor.color(value) : Theme.panelAlt, in: RoundedRectangle(cornerRadius: 4))
+            .background(value > 0 ? AttrColor.color(value).opacity(0.13) : Theme.panelAlt, in: RoundedRectangle(cornerRadius: 4))
     }
 }
 
@@ -153,7 +177,7 @@ struct FilterGroup<Content: View>: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(active ? Theme.accentSoft.opacity(0.45) : Theme.panel, in: RoundedRectangle(cornerRadius: 9))
+        .background(active ? Theme.accentSoft.opacity(0.6) : Theme.panel, in: RoundedRectangle(cornerRadius: 9))
         .overlay(RoundedRectangle(cornerRadius: 9).stroke(active ? Theme.accent.opacity(0.7) : Theme.stroke))
     }
 }
@@ -170,7 +194,7 @@ struct PitchBackground: View {
                 ctx.fill(Path(CGRect(x: 0, y: CGFloat(i) * h, width: size.width, height: h)),
                          with: .color(i % 2 == 0 ? Theme.pitch : Theme.pitchDark))
             }
-            let line = GraphicsContext.Shading.color(.white.opacity(0.35))
+            let line = GraphicsContext.Shading.color(.white.opacity(0.45))
             let inset = r.insetBy(dx: 6, dy: 6)
             ctx.stroke(Path(inset), with: line, lineWidth: 1.2)
             ctx.stroke(Path { p in p.move(to: CGPoint(x: inset.minX, y: inset.midY)); p.addLine(to: CGPoint(x: inset.maxX, y: inset.midY)) },
@@ -252,11 +276,11 @@ struct RadarChart: View {
                 var p = Path()
                 for i in 0..<n { if i == 0 { p.move(to: pt(i, ring)) } else { p.addLine(to: pt(i, ring)) } }
                 p.closeSubpath()
-                ctx.stroke(p, with: .color(.white.opacity(ring == 20 ? 0.25 : 0.1)), lineWidth: 1)
+                ctx.stroke(p, with: .color(Theme.ink.opacity(ring == 20 ? 0.22 : 0.08)), lineWidth: 1)
             }
             for i in 0..<n {
                 var p = Path(); p.move(to: c); p.addLine(to: pt(i, 20))
-                ctx.stroke(p, with: .color(.white.opacity(0.1)), lineWidth: 1)
+                ctx.stroke(p, with: .color(Theme.ink.opacity(0.08)), lineWidth: 1)
                 let lp = pt(i, 21.5)
                 let dx = lp.x - c.x
                 let anchor: UnitPoint = dx > radius * 0.2 ? .leading : dx < -radius * 0.2 ? .trailing : (lp.y < c.y ? .bottom : .top)
@@ -267,7 +291,7 @@ struct RadarChart: View {
                 for i in 0..<min(n, values.count) { if i == 0 { p.move(to: pt(i, values[i])) } else { p.addLine(to: pt(i, values[i])) } }
                 p.closeSubpath()
                 let col = Theme.series[si % Theme.series.count]
-                ctx.fill(p, with: .color(col.opacity(0.22)))
+                ctx.fill(p, with: .color(col.opacity(0.16)))
                 ctx.stroke(p, with: .color(col), lineWidth: 2)
             }
         }
@@ -285,14 +309,29 @@ enum RoleText {
 }
 
 
-/// Column widths that fit their content when a table first opens (until you drag one: then yours is kept).
+/// Column widths that fit their content: the narrowest width that still shows every value and the header.
+/// Only the starting width: once you drag a column, your width is kept (and saved between launches).
 enum ColumnFit {
-    static func width(_ strings: [String], min lo: CGFloat, max hi: CGFloat, extra: CGFloat = 22, medium: Bool = false) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: medium ? .medium : .regular)
+    /// Cell padding the inset table adds around the text.
+    static let pad: CGFloat = 16
+
+    static func text(_ s: String, size: CGFloat = NSFont.systemFontSize, weight: NSFont.Weight = .regular) -> CGFloat {
+        (s as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width
+    }
+
+    /// Header title plus padding (headers use the small system font).
+    static func header(_ title: String) -> CGFloat {
+        (text(title, size: NSFont.smallSystemFontSize, weight: .medium) + 14).rounded(.up)
+    }
+
+    /// `extra` is for fixed adornments next to the text (icons, NEW or loan tags), not padding.
+    static func width(_ strings: [String], header title: String = "", min lo: CGFloat = 0, max hi: CGFloat,
+                      extra: CGFloat = 0, medium: Bool = false) -> CGFloat {
         var w: CGFloat = 0
         for s in strings.prefix(600) where !s.isEmpty {
-            w = Swift.max(w, (s as NSString).size(withAttributes: [.font: font]).width)
+            w = Swift.max(w, text(s, weight: medium ? .medium : .regular))
         }
-        return Swift.min(hi, Swift.max(lo, (w + extra).rounded()))
+        let fit = Swift.max(w + pad + extra, header(title), lo)
+        return Swift.min(hi, fit.rounded(.up))
     }
 }

@@ -23,7 +23,8 @@ struct ColumnsMenu: View {
                 }
             }
             Divider()
-            Button("Reset to default") { store.resetColumns(table) }
+            Button("Reset to default columns") { store.resetColumns(table) }
+            Button("Reset widths & order") { store.layoutResets[table, default: 0] += 1 }
         } label: {
             Label(count > 0 ? "Columns (\(count))" : "Columns", systemImage: "tablecells")
         }
@@ -75,9 +76,10 @@ struct StatCell: View {
             Text(row.growth == PlayerRow.noGrowth ? "—" : (row.growth > 0 ? "+\(row.growth)" : "\(row.growth)"))
                 .monospacedDigit()
                 .foregroundStyle(row.growth == PlayerRow.noGrowth ? Color.secondary
-                                 : row.growth > 0 ? Color.green : row.growth < 0 ? Color.red : Color.secondary)
+                                 : row.growth > 0 ? Theme.good : row.growth < 0 ? Theme.bad : Color.secondary)
         case "meta":
             score(row.meta)
+                .help("Meta \(String(format: "%.1f", row.meta)): overall quality from the attributes that win matches in FM, keepers on the same scale. Better than \(row.metaRating)% of players in your division, \(row.metaRatingAll)% of everyone scanned.")
         case "bestRole":
             HStack(spacing: 4) {
                 Text(Roles.role(row.bestRole)?.short ?? row.bestRole).foregroundStyle(.secondary).lineLimit(1)
@@ -105,31 +107,61 @@ struct StatCell: View {
     }
 }
 
-/// Width for a user-added column: attributes are narrow number boxes.
+/// Width for a user-added column: attributes are narrow number boxes; never narrower than the header.
 extension StatColumn {
-    var minWidth: CGFloat { isAttribute ? 32 : 50 }
+    var minWidth: CGFloat { isAttribute ? 30 : 36 }
     var idealWidth: CGFloat {
-        if isAttribute { return 40 }
-        switch key {
-        case "interest", "nation": return 92
-        case "bestRole": return 170
-        case "division": return 140
-        default: return 70
+        let content: CGFloat
+        if isAttribute { content = 36 } else {
+            switch key {
+            case "interest", "nation": content = 92
+            case "bestRole": content = 150
+            case "division": content = 140
+            case "value", "ask", "wage", "pricePerCA": content = 64
+            case "contract", "height": content = 62
+            default: content = 44
+            }
         }
+        return max(content, ColumnFit.header(shortTitle))
     }
     var maxWidth: CGFloat { isAttribute ? 60 : 220 }
 }
 
 /// Right-click items shared by every player list.
+/// Right-click menu for one or more selected players (every player table uses it).
 struct PlayerContextItems: View {
     let ids: Set<UInt32>
     let store: Store
+    var onOpen: ((UInt32) -> Void)? = nil
 
     var body: some View {
-        Button(ids.count > 1 ? "Copy Names" : "Copy Name") { store.copyName(ids) }
+        let n = ids.count
+        let starred = !ids.isEmpty && ids.allSatisfy { store.shortlist.contains($0) }
+        let comparing = !ids.isEmpty && ids.allSatisfy { store.compareIds.contains($0) }
+        if n == 1, let id = ids.first, let onOpen {
+            Button("Show Profile") { onOpen(id) }
+            Divider()
+        }
+        Button(starred ? (n > 1 ? "Remove \(n) from Shortlist" : "Remove from Shortlist")
+                       : (n > 1 ? "Add \(n) to Shortlist" : "Add to Shortlist")) {
+            store.setShortlisted(ids, !starred)
+        }
+        if store.filter.shortlistOnly, store.shortlistFromFM, ids.contains(where: { store.fmShortlist.contains($0) }) {
+            Button(n > 1 ? "Remove \(n) from FM Shortlist" : "Remove from FM Shortlist") { store.removeFromFMShortlist(ids) }
+        }
         Divider()
-        Button("Add/Remove Shortlist") { ids.forEach { store.toggleShortlist($0) } }
-        Button("Add/Remove from Comparison") { ids.forEach { store.toggleCompare($0) } }
+        if (2...3).contains(n) {
+            Button("Compare These \(n)") {
+                store.compareIds = Array(ids)
+                store.showCompare = true
+            }
+        }
+        Button(comparing ? "Remove from Comparison" : "Add to Comparison") {
+            for id in ids where store.compareIds.contains(id) == comparing { store.toggleCompare(id) }
+        }
+        Divider()
+        Button(n > 1 ? "Copy \(n) Names" : "Copy Name") { store.copyName(ids) }
+        Button("Copy as CSV") { store.copyCSV(ids) }
     }
 }
 
@@ -163,5 +195,32 @@ struct SuggestionField: View {
             if starts.count >= limit { break }
         }
         return Array((starts + contains).prefix(limit))
+    }
+}
+
+/// Table column order, visibility and widths, kept in the app's settings so they survive quitting.
+/// (SwiftUI's window storage is dropped whenever macOS doesn't restore windows.)
+enum ColumnLayouts {
+    private static func key(_ table: String) -> String { "columnLayout." + table }
+
+    static func load<Row: Identifiable>(_ table: String) -> TableColumnCustomization<Row> {
+        guard let d = UserDefaults.standard.data(forKey: key(table)),
+              let c = try? JSONDecoder().decode(TableColumnCustomization<Row>.self, from: d) else { return .init() }
+        return c
+    }
+
+    static func save<Row: Identifiable>(_ c: TableColumnCustomization<Row>, _ table: String) {
+        if let d = try? JSONEncoder().encode(c) { UserDefaults.standard.set(d, forKey: key(table)) }
+    }
+}
+
+extension View {
+    /// Saves a table's column layout whenever it changes, and clears it when "Reset widths & order" is picked.
+    func persistsColumns<Row: Identifiable>(_ layout: Binding<TableColumnCustomization<Row>>, table: String, store: Store) -> some View {
+        self.onChange(of: layout.wrappedValue) { ColumnLayouts.save(layout.wrappedValue, table) }
+            .onChange(of: store.layoutResets[table] ?? 0) {
+                layout.wrappedValue = TableColumnCustomization<Row>()
+                ColumnLayouts.save(layout.wrappedValue, table)
+            }
     }
 }

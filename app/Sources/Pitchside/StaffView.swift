@@ -139,6 +139,10 @@ struct StaffView: View {
         let clubW: CGFloat = ColumnFit.width(sample.map { $0.club.isEmpty ? "Free agent" : $0.club }, header: "Club", max: 260)
         let nationW: CGFloat = ColumnFit.width(sample.map(\.nation), header: "Country", max: 160)
         let attrW: CGFloat = max(110, ColumnFit.header(attrTitle))
+        let areaName: String = store.staffFilter.area
+        let best = store.staffBests[areaName]
+        let bestName: String? = best?.row.name
+        let bestScore: Double = best?.score ?? 0
         return Table(store.staff, selection: $selection, sortOrder: $store.staffSort, columnCustomization: $columnLayout) {
             TableColumn("Name", value: \.name) { r in Text(r.name).fontWeight(.medium).lineLimit(1) }
                 .width(min: 80, ideal: nameW)
@@ -158,7 +162,7 @@ struct StaffView: View {
             // A table block takes at most 10 columns; Group lifts the limit.
             Group {
                 TableColumn(attrTitle, value: \.areaSortValue) { r in
-                    StaffScoreCell(row: r, area: store.staffFilter.area, attrTitle: attrTitle)
+                    StaffScoreCell(row: r, area: areaName, attrTitle: attrTitle, bestName: bestName, bestScore: bestScore)
                 }
                 .width(min: 60, ideal: attrW, max: 220).customizationID("attr")
                 TableColumn("Interest", value: \.interestRank) { r in
@@ -199,7 +203,9 @@ struct StaffScoreCell: View {
     let row: StaffRow
     let area: String
     let attrTitle: String
-    @Environment(Store.self) private var store
+    /// Your best person in the area (table cells get plain values, not the app's shared data).
+    let bestName: String?
+    let bestScore: Double
 
     var body: some View {
         if area.isEmpty {
@@ -222,8 +228,8 @@ struct StaffScoreCell: View {
 
     private func tip(_ score: Double) -> String {
         let mine = String(format: "%.1f in %@", score, area)
-        guard let best = store.staffBests[area] else { return mine }
-        return mine + String(format: "; your best is %@ at %.1f", best.row.name, best.score)
+        guard let bestName else { return mine }
+        return mine + String(format: "; your best is %@ at %.1f", bestName, bestScore)
     }
 }
 

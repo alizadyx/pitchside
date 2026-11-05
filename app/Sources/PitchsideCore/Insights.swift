@@ -207,7 +207,7 @@ extension SquadBuilder {
 public enum StaffAdvisor {
     /// Which jobs can do the work of an area. Matched against the job title, lowercased.
     public enum JobGroup: Sendable, Hashable {
-        case coaching, setPieces, goalkeeping, fitness, youth, scouting, physio, sportsScience, analysis
+        case coaching, setPieces, goalkeeping, fitness, youth, scouting, physio, sportsScience, analysis, assistant
     }
 
     public struct Area: Sendable, Identifiable, Hashable {
@@ -218,6 +218,9 @@ public enum StaffAdvisor {
     }
 
     public static let areas: [Area] = [
+        // Team talks, match analysis and running training: FM's assistant manager duties.
+        Area(title: "Assistant manager", keys: ["TacticalKnowledge", "Motivating", "PeopleManagement", "JudgingAbility", "Tactical"],
+             group: .assistant),
         Area(title: "Attacking coaching", keys: ["Attacking"], group: .coaching),
         Area(title: "Defending coaching", keys: ["Defending"], group: .coaching),
         Area(title: "Fitness coaching", keys: ["Fitness"], group: .fitness),
@@ -258,6 +261,7 @@ public enum StaffAdvisor {
         case .physio: return j.contains("physio") || j.contains("doctor")
         case .sportsScience: return j.contains("sports scien") || j.contains("doctor") || j.contains("performance")
         case .analysis: return j.contains("analys")
+        case .assistant: return coach
         }
     }
 
@@ -306,7 +310,9 @@ public enum StaffAdvisor {
         let mine = staff.filter { $0.person.club == club }
         var out: [String: (row: StaffRow, score: Double)] = [:]
         for area in areas {
-            let scored = mine.filter { fits($0.job, area.group) }.compactMap { r in score(r, area.keys, meta).map { (r, $0) } }
+            // Your current assistant is whoever holds the job, not every coach who could do it.
+            let holders = mine.filter { area.group == .assistant ? $0.job.lowercased().contains("assistant manager") : fits($0.job, area.group) }
+            let scored = holders.compactMap { r in score(r, area.keys, meta).map { (r, $0) } }
             if let b = scored.max(by: { $0.1 < $1.1 }) { out[area.title] = (b.0, b.1) }
         }
         return out

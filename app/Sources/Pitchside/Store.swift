@@ -422,10 +422,30 @@ final class Store {
 
     func resort() { players.sort(using: playerSort) }
 
+    /// Your club's reputation, as used for "likely to join".
+    var myClubReputation: Int? {
+        clubTeams.first { $0.rank == 0 }?.reputation ?? squadReport?.squad.compactMap(\.person.trep).max()
+    }
+
+    @ObservationIgnored private var bestsCache: (key: String, bests: [String: (row: StaffRow, score: Double)])?
+
+    /// Your best person per staff area (cached per club and scan).
+    var staffBests: [String: (row: StaffRow, score: Double)] {
+        guard let meta, !myClub.isEmpty else { return [:] }
+        let key = "\(myClub)|\(allStaff.count)|\(meta.scannedAt ?? "")"
+        if let c = bestsCache, c.key == key { return c.bests }
+        let b = StaffAdvisor.clubBests(club: myClub, staff: allStaff, meta: meta)
+        bestsCache = (key, b)
+        return b
+    }
+
     func refilterStaff() {
         guard let meta else { staff = []; return }
         let idx = meta.staffAttrKeys.firstIndex(of: staffColumnKey)
-        var out = Filtering.apply(staffFilter, to: allStaff, meta: meta)
+        let cap = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
+        let ctx = myClub.isEmpty ? nil : StaffClubContext(club: myClub, reputation: myClubReputation,
+                                                          bests: staffBests.mapValues(\.score), maxWageGbp: cap)
+        var out = Filtering.apply(staffFilter, to: allStaff, meta: meta, club: ctx)
         for i in out.indices {
             out[i].selectedAttr = idx.flatMap { j in out[i].person.s.flatMap { j < $0.count ? Int($0[j]) : nil } } ?? 0
         }
@@ -1061,8 +1081,7 @@ final class Store {
     func refreshStaffAdvice() {
         guard let meta, !myClub.isEmpty else { staffAdvice = []; return }
         let cap = wageBudget > 0 ? Int(Double(wageBudget) / max(rate, 0.0001)) : 0
-        let rep = clubTeams.first { $0.rank == 0 }?.reputation
-            ?? squadReport?.squad.compactMap(\.person.trep).max()
+        let rep = myClubReputation
         staffAdvice = StaffAdvisor.advise(club: myClub, staff: allStaff, meta: meta, maxWageGbp: cap,
                                           clubRep: rep, realistic: staffRealistic)
     }

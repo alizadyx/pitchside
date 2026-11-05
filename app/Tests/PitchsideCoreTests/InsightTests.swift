@@ -193,4 +193,34 @@ final class InsightTests: XCTestCase {
         XCTAssertTrue(StaffAdvisor.fits("Media Analyst", .setPieces))
         XCTAssertFalse(StaffAdvisor.fits("Media Analyst", .coaching))
     }
+
+    func testStaffSearchForMyClub() {
+        func person(_ id: UInt32, _ name: String, club: String?, _ s: [UInt8], wage: Int?, job: String,
+                    rep: Int, nat: String = "England") -> Person {
+            var p = Person(id: id, n: name, ca: 100, pa: 100); p.club = club; p.s = s; p.wage = wage; p.dob = "1980-01-01"
+            p.job = job; p.rep = rep; p.trep = club == nil ? nil : 2700; p.nat = nat
+            return p
+        }
+        let staff = RowBuilder.staff([
+            person(1, "Our Coach", club: "Home FC", [9, 9, 9, 9], wage: 300, job: "Coach", rep: 2500),
+            person(2, "Famous Free", club: nil, [19, 10, 5, 5], wage: nil, job: "", rep: 8900, nat: "Germany"),
+            person(3, "Local Free", club: nil, [13, 10, 5, 5], wage: nil, job: "", rep: 3100),
+            person(4, "Slight Upgrade", club: "Other", [10, 10, 5, 5], wage: 300, job: "Coach", rep: 2800),
+            person(5, "Spanish Coach", club: "Other", [14, 10, 5, 5], wage: 400, job: "Coach", rep: 3000, nat: "Spain"),
+        ], reference: Ages.date("2026-07-13")!)
+        let bests = StaffAdvisor.clubBests(club: "Home FC", staff: staff, meta: meta).mapValues(\.score)
+        let ctx = StaffClubContext(club: "Home FC", reputation: 2700, bests: bests, maxWageGbp: 0)
+        var f = StaffFilter(); f.area = "Attacking coaching"
+        let names = Filtering.apply(f, to: staff, meta: meta, club: ctx).map(\.name)
+        XCTAssertEqual(Set(names), ["Local Free", "Spanish Coach"], "famous free agents and small upgrades are left out")
+        f.likelyOnly = false
+        let all = Filtering.apply(f, to: staff, meta: meta, club: ctx)
+        XCTAssertEqual(all.first { $0.name == "Famous Free" }?.doubt, "too big a name, even out of work")
+        f.upgradesOnly = false
+        XCTAssertTrue(Filtering.apply(f, to: staff, meta: meta, club: ctx).contains { $0.name == "Slight Upgrade" })
+        var g = StaffFilter(); g.nation = "spa"
+        XCTAssertEqual(Filtering.apply(g, to: staff, meta: meta).map(\.name), ["Spanish Coach"])
+        g = StaffFilter(); g.freeAgentsOnly = true
+        XCTAssertEqual(Set(Filtering.apply(g, to: staff, meta: meta).map(\.name)), ["Famous Free", "Local Free"])
+    }
 }

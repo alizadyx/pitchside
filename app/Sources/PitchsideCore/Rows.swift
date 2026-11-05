@@ -63,8 +63,21 @@ public struct StaffRow: Identifiable, Sendable, Hashable {
     public var age: Int
     /// Value of the attribute chosen for the extra column.
     public var selectedAttr: Int = 0
+    /// Score in the "For my club" area being searched (0 when none).
+    public var areaScore: Double = 0
+    /// Why he probably wouldn't join your club; nil when he might (or no club is set).
+    public var doubt: String? = nil
+    /// Whether `doubt` was worked out (a club is set).
+    public var interestKnown = false
+    /// Sort key for the Interest column: likely first.
+    public var interestRank: Int { interestKnown ? (doubt == nil ? 1 : 0) : -1 }
+    public var wageSort: Int { person.wage ?? -1 }
+    /// Sort key for the extra column: the area score when searching an area, else the chosen attribute.
+    public var areaSortValue: Double { areaScore > 0 ? areaScore : Double(selectedAttr) }
 
-    public static func == (a: StaffRow, b: StaffRow) -> Bool { a.id == b.id && a.age == b.age && a.selectedAttr == b.selectedAttr }
+    public static func == (a: StaffRow, b: StaffRow) -> Bool {
+        a.id == b.id && a.age == b.age && a.selectedAttr == b.selectedAttr && a.areaScore == b.areaScore && a.doubt == b.doubt
+    }
     public func hash(into h: inout Hasher) { h.combine(id) }
 }
 
@@ -201,7 +214,43 @@ public struct StaffFilter: Codable, Sendable, Equatable {
     public var minCA = 0
     public var gender = 0                // 0 = all, 1 = men, 2 = women
     public var rules: [AttributeRule] = []
+    public var nation = ""
+    public var freeAgentsOnly = false
+    /// "For my club": a StaffAdvisor area title, "" for none.
+    public var area = ""
+    /// Only people at least 2 points better than your best in the area.
+    public var upgradesOnly = true
+    /// Only people who'd plausibly join your club.
+    public var likelyOnly = true
     public init() {}
+
+    enum CodingKeys: String, CodingKey { case text, job, minAge, maxAge, minCA, gender, rules, nation, freeAgentsOnly, area, upgradesOnly, likelyOnly }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        job = try c.decodeIfPresent(String.self, forKey: .job) ?? ""
+        minAge = try c.decodeIfPresent(Int.self, forKey: .minAge) ?? 15
+        maxAge = try c.decodeIfPresent(Int.self, forKey: .maxAge) ?? 90
+        minCA = try c.decodeIfPresent(Int.self, forKey: .minCA) ?? 0
+        gender = try c.decodeIfPresent(Int.self, forKey: .gender) ?? 0
+        rules = try c.decodeIfPresent([AttributeRule].self, forKey: .rules) ?? []
+        nation = try c.decodeIfPresent(String.self, forKey: .nation) ?? ""
+        freeAgentsOnly = try c.decodeIfPresent(Bool.self, forKey: .freeAgentsOnly) ?? false
+        area = try c.decodeIfPresent(String.self, forKey: .area) ?? ""
+        upgradesOnly = try c.decodeIfPresent(Bool.self, forKey: .upgradesOnly) ?? true
+        likelyOnly = try c.decodeIfPresent(Bool.self, forKey: .likelyOnly) ?? true
+    }
+}
+
+/// What staff search needs to know about your club for "For my club" and the Interest column.
+public struct StaffClubContext: Sendable {
+    public let club: String
+    public let reputation: Int?
+    public let bests: [String: Double]       // area title → your best score
+    public let maxWageGbp: Int               // 0 = no limit
+    public init(club: String, reputation: Int?, bests: [String: Double], maxWageGbp: Int) {
+        self.club = club; self.reputation = reputation; self.bests = bests; self.maxWageGbp = maxWageGbp
+    }
 }
 
 public enum Filtering {
@@ -262,23 +311,45 @@ public enum Filtering {
         }
     }
 
-    public static func apply(_ f: StaffFilter, to rows: [StaffRow], meta: ExportMeta) -> [StaffRow] {
+    /// Staff search. With `club`, rows also get their Interest (doubt), and an `area` filter ranks people
+    /// for that job at your club: only those who can do it, with paid jobs or free, scored in `areaScore`.
+    public static func apply(_ f: StaffFilter, to rows: [StaffRow], meta: ExportMeta, club: StaffClubContext? = nil) -> [StaffRow] {
         let text = f.text.trimmingCharacters(in: .whitespaces).lowercased()
         let job = f.job.trimmingCharacters(in: .whitespaces).lowercased()
+        let nation = f.nation.trimmingCharacters(in: .whitespaces).lowercased()
         let idx = Dictionary(uniqueKeysWithValues: meta.staffAttrKeys.enumerated().map { ($1, $0) })
-        return rows.filter { r in
+        let area = f.area.isEmpty ? nil : StaffAdvisor.areas.first { $0.title == f.area }
+        let floor = area.flatMap { a in club?.bests[a.title] }.map { $0 + 2 } ?? 0
+        return rows.compactMap { r0 in
+            var r = r0
             let p = r.person
-            if r.age < f.minAge || r.age > f.maxAge || p.ca < f.minCA { return false }
-            if f.gender == 1 && p.f == 1 { return false }
-            if f.gender == 2 && p.f != 1 { return false }
-            if !text.isEmpty && !(p.n + " " + (p.club ?? "")).lowercased().contains(text) { return false }
-            if !job.isEmpty && !(p.job ?? "").lowercased().contains(job) { return false }
+            if r.age < f.minAge || r.age > f.maxAge || p.ca < f.minCA { return nil }
+            if f.gender == 1 && p.f == 1 { return nil }
+            if f.gender == 2 && p.f != 1 { return nil }
+            if f.freeAgentsOnly && !r.club.isEmpty { return nil }
+            if !text.isEmpty && !(p.n + " " + (p.club ?? "")).lowercased().contains(text) { return nil }
+            if !job.isEmpty && !r.job.lowercased().contains(job) { return nil }
+            if !nation.isEmpty && !(p.nat ?? "").lowercased().contains(nation) { return nil }
             for rule in f.rules {
                 guard let i = idx[rule.key] else { continue }
                 let v = p.s.flatMap { i < $0.count ? Int($0[i]) : nil } ?? 0
-                if v < rule.min { return false }
+                if v < rule.min { return nil }
             }
-            return true
+            if let club {
+                r.interestKnown = true
+                r.doubt = r.club == club.club ? nil : StaffAdvisor.doubt(r, clubRep: club.reputation)
+            }
+            if let area {
+                guard StaffAdvisor.canDo(r, area), let sc = StaffAdvisor.areaScore(r, area: area, meta: meta) else { return nil }
+                if !r.club.isEmpty && (p.wage ?? 0) <= 0 { return nil }          // board members, volunteers
+                r.areaScore = sc
+                if let club {
+                    if f.upgradesOnly && (r.club == club.club || sc < floor) { return nil }
+                    if f.likelyOnly && r.doubt != nil { return nil }
+                    if club.maxWageGbp > 0, let w = p.wage, w > club.maxWageGbp { return nil }
+                }
+            }
+            return r
         }
     }
 }

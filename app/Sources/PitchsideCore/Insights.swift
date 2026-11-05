@@ -286,14 +286,38 @@ public enum StaffAdvisor {
         return vals.count == keys.count ? vals.reduce(0, +) / Double(vals.count) : nil
     }
 
-    /// Would this person consider moving to a club of `clubRep` (team reputation, 0–10000)?
-    /// Free agents always would; staff at clearly bigger clubs, or far more famous than your club, wouldn't.
-    static func doubt(_ r: StaffRow, clubRep: Int?) -> String? {
+    /// How far above your club's reputation someone can be and still talk to you. In a real FM27 save,
+    /// National League South staff sit around 2,800 with nine in ten below 4,000, at clubs around 2,700–3,100.
+    public static let reputationReach = 1200
+
+    /// Would this person consider moving to a club of `clubRep` (reputation, 0–10000)? Nil when realistic.
+    /// Free agents are judged too: an out-of-work Klopp still won't manage a non-league side.
+    public static func doubt(_ r: StaffRow, clubRep: Int?) -> String? {
         guard let mine = clubRep, mine > 0 else { return nil }
-        if r.club.isEmpty { return nil }
-        if let theirs = r.person.trep, theirs > mine + 400 { return "works for a bigger club" }
-        if let rep = r.person.rep, rep > mine + 2500 { return "too big a name for your club" }
+        if let rep = r.person.rep, rep > mine + reputationReach {
+            return r.club.isEmpty ? "too big a name, even out of work" : "too big a name for your club"
+        }
+        if !r.club.isEmpty, let theirs = r.person.trep, theirs > mine + 400 { return "works for a bigger club" }
         return nil
+    }
+
+    /// Your best person in each area (area title → score), only counting people whose job does that work.
+    public static func clubBests(club: String, staff: [StaffRow], meta: ExportMeta) -> [String: (row: StaffRow, score: Double)] {
+        let mine = staff.filter { $0.person.club == club }
+        var out: [String: (row: StaffRow, score: Double)] = [:]
+        for area in areas {
+            let scored = mine.filter { fits($0.job, area.group) }.compactMap { r in score(r, area.keys, meta).map { (r, $0) } }
+            if let b = scored.max(by: { $0.1 < $1.1 }) { out[area.title] = (b.0, b.1) }
+        }
+        return out
+    }
+
+    /// Area score for one person (average of the area's attributes), nil if the scan lacks them.
+    public static func areaScore(_ r: StaffRow, area: Area, meta: ExportMeta) -> Double? { score(r, area.keys, meta) }
+
+    /// Can this person be hired to do the area's work? Their job fits, or they're a free agent (not a board member).
+    public static func canDo(_ r: StaffRow, _ area: Area) -> Bool {
+        fits(r.job, area.group) || (r.club.isEmpty && !isBoard(r.job))
     }
 
     /// Areas from weakest to strongest at your club, each with up to `limit` clear upgrades

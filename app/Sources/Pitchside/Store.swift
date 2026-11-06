@@ -428,6 +428,12 @@ final class Store {
     }
 
     struct JobCount: Identifiable { let title: String; let count: Int; var id: String { title } }
+
+    /// Most common first, then alphabetical.
+    private static func jobOrder(_ a: JobCount, _ b: JobCount) -> Bool {
+        if a.count != b.count { return a.count > b.count }
+        return a.title < b.title
+    }
     @ObservationIgnored private var jobsCache: (key: Int, jobs: [JobCount])?
 
     /// Every job title in the scan with how many people hold it, most common first (for Exclude jobs).
@@ -435,7 +441,9 @@ final class Store {
         if let c = jobsCache, c.key == allStaff.count { return c.jobs }
         var counts: [String: Int] = [:]
         for r in allStaff where !r.job.isEmpty { counts[r.job, default: 0] += 1 }
-        let jobs = counts.map { JobCount(title: $0.key, count: $0.value) }.sorted { $0.count > $1.count || ($0.count == $1.count && $0.title < $1.title) }
+        var jobs: [JobCount] = []
+        for (title, count) in counts { jobs.append(JobCount(title: title, count: count)) }
+        jobs.sort(by: Self.jobOrder)
         jobsCache = (allStaff.count, jobs)
         return jobs
     }

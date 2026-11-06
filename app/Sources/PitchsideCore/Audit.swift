@@ -4,6 +4,29 @@ import Foundation
 /// Run: swift run -c release PitchsideAudit <export.json> <out.json> ["Club name"]
 public enum Audit {
     @discardableResult
+    /// Text summary of a rotation plan for one club's first team (checks the planner on real scans).
+    public static func rotation(exportPath path: String, club: String, formation name: String, matches: Int) throws -> String {
+        var file = try JSONDecoder().decode(ExportFile.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        file.players = file.players.filter { $0.club == club || $0.own == club }
+        let fmt = ISO8601DateFormatter(); fmt.formatOptions = [.withFullDate]
+        let ref = file.meta.gameDate.flatMap { fmt.date(from: String($0.prefix(10))) } ?? Date()
+        let side = SquadBuilder.team(RowBuilder.players(file.players, meta: file.meta, reference: ref, shortlist: []), women: false)
+        let teams = SquadBuilder.teams(club: club, rows: side)
+        let squad = teams.first.map { SquadBuilder.members(of: $0, club: club, rows: side) } ?? side.filter { $0.person.club == club }
+        let f = Formations.presets.first { $0.name == name } ?? Formations.all[0]
+        let plan = Rotation.plan(formation: f, squad: squad, meta: file.meta, settings: .init(matches: matches))
+        var out = "\(club) \(f.name), \(squad.count) players, best XI \(plan.bestLevel)\n"
+        for xi in plan.xis {
+            out += "XI \(xi.id + 1) level \(xi.level)" + (xi.cover > 0 ? " (\(xi.cover) cover)" : "") + "\n"
+            for p in xi.picks {
+                out += "  \(p.slot.label.padding(toLength: 4, withPad: " ", startingAt: 0)) \(p.player?.name ?? "—") \(p.score)"
+                    + (p.natural ? "" : " [cover]") + (p.overCap ? " [over cap]" : "") + "\n"
+            }
+        }
+        out += "Starts: " + plan.loads.map { "\($0.row.name) \($0.starts)" }.joined(separator: ", ")
+        return out
+    }
+
     public static func dump(exportPath path: String, club: String, outPath: String) throws -> Int {
         var file = try JSONDecoder().decode(ExportFile.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
         // Whole scan (meta is calibrated across it) unless asked to keep only the club, which is faster.

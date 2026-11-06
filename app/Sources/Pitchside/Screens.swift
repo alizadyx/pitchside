@@ -42,7 +42,8 @@ struct SquadView: View {
     @State private var picked: UInt32?
     @State private var showSave = false
     @State private var saveName = ""
-    /// 0 My tactic, 6 Depth, 3 Suggested, 7 FM presets, 4 Set pieces & captain, 5 Team instructions, 1 My squad, 2 Timeline.
+    /// 0 My tactic, 6 Depth, 3 Suggested, 7 FM presets, 4 Set pieces & captain, 5 Team instructions, 1 My squad,
+    /// 8 Rotation, 2 Timeline.
     @AppStorage("squadMode") private var mode = 0
 
     var body: some View {
@@ -55,6 +56,8 @@ struct SquadView: View {
                 MySquadView(picked: $picked)
             } else if store.squadReport != nil && mode == 2 {
                 SquadTimelineView(picked: $picked)
+            } else if store.squadReport != nil && mode == 8 {
+                RotationView(picked: $picked)
             } else if store.squadReport != nil && mode == 3 {
                 FormationsPane(onUse: { mode = 0 })
             } else if store.squadReport != nil && mode == 7 {
@@ -123,12 +126,13 @@ struct SquadView: View {
                     Text("Set pieces").tag(4)
                     Text("Instructions").tag(5)
                     Text("My squad").tag(1)
+                    Text("Rotation").tag(8)
                     Text("Timeline").tag(2)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help("My tactic: your formation and roles, how your squad fits and who to sign. Depth: everyone who can play each position. Suggested: the shapes that suit your squad best. FM presets: every preset the game offers, ranked for your squad. Set pieces & captain, team instructions, everyone at the club, and the next three seasons.")
+                .help("My tactic: your formation and roles, how your squad fits and who to sign. Depth: everyone who can play each position. Suggested: the shapes that suit your squad best. FM presets: every preset the game offers, ranked for your squad. Set pieces & captain, team instructions, everyone at the club, rotation XIs for busy weeks, and the next three seasons.")
                 if store.clubTeams.count > 1 {
                     Picker("Squad", selection: $store.squadTeamRank) {
                         ForEach(store.clubTeams) { t in Text("\(t.label) (\(t.count))").tag(t.rank) }

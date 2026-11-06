@@ -209,6 +209,41 @@ final class Store {
     var squadTeamRank: Int = UserDefaults.standard.object(forKey: "squadTeamRank") as? Int ?? 0 {
         didSet { UserDefaults.standard.set(squadTeamRank, forKey: "squadTeamRank"); refreshSquad() }
     }
+    // MARK: Rotation
+
+    /// How many XIs the Rotation view plans (2 or 3).
+    var rotationMatches: Int = UserDefaults.standard.object(forKey: "rotationMatches") as? Int ?? 3 {
+        didSet { UserDefaults.standard.set(rotationMatches, forKey: "rotationMatches"); refreshRotation() }
+    }
+    /// Let reserves and youth players into the rotation.
+    var rotationYouth: Bool = UserDefaults.standard.bool(forKey: "rotationYouth") {
+        didSet { UserDefaults.standard.set(rotationYouth, forKey: "rotationYouth"); refreshRotation() }
+    }
+    /// Injured, suspended or exhausted: left out of every XI.
+    var rotationUnavailable: Set<UInt32> = Store.loadIds("rotationUnavailable") {
+        didSet { UserDefaults.standard.set(rotationUnavailable.map { Int($0) }, forKey: "rotationUnavailable"); refreshRotation() }
+    }
+    /// Locked: starts every match, exempt from the cap.
+    var rotationLocked: Set<UInt32> = Store.loadIds("rotationLocked") {
+        didSet { UserDefaults.standard.set(rotationLocked.map { Int($0) }, forKey: "rotationLocked"); refreshRotation() }
+    }
+    private(set) var rotationPlan: Rotation.Plan?
+
+    static func loadIds(_ key: String) -> Set<UInt32> {
+        Set((UserDefaults.standard.array(forKey: key) as? [Int] ?? []).map { UInt32($0) })
+    }
+
+    func refreshRotation() {
+        guard let meta, let report = squadReport else { rotationPlan = nil; return }
+        var squad = report.squad
+        if rotationYouth {
+            let have = Set(squad.map(\.id))
+            squad += teamRows.filter { $0.person.club == myClub && !have.contains($0.id) }
+        }
+        let settings = Rotation.Settings(matches: rotationMatches, unavailable: rotationUnavailable, locked: rotationLocked)
+        rotationPlan = Rotation.plan(formation: formation, squad: squad, meta: meta, settings: settings)
+    }
+
     /// The squad over the next three seasons, for the Timeline view.
     private(set) var squadTimeline: [SquadBuilder.SeasonPlan] = []
     /// Staff upgrades for your club, weakest area first.
@@ -950,7 +985,8 @@ final class Store {
     func refreshSquad() {
         guard let meta, !myClub.isEmpty, !allPlayers.isEmpty else {
             squadReport = nil; suggestions = []; clubTeams = []; squadTimeline = []
-            tacticsFits = []; presetFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; myTacticFit = nil; return
+            tacticsFits = []; presetFits = []; tacticsSetPieces = nil; tacticsInstructions = nil; myTacticFit = nil
+            rotationPlan = nil; return
         }
         ensureInterestModel()
         let side = teamRows
@@ -965,6 +1001,7 @@ final class Store {
         squadTimeline = SquadBuilder.timeline(club: myClub, formation: formation, squad: squadReport?.squad ?? [],
                                               meta: meta, season: season)
         buildSquadRows()
+        refreshRotation()
         refreshTactics()
         refreshLeague()
         if columns(for: "players").contains(where: { $0.id == "gen.interest" }) { refilter() }

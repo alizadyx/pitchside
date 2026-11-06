@@ -215,21 +215,30 @@ public enum StaffAdvisor {
         public let title: String
         public let keys: [String]
         public let group: JobGroup
+        /// Share of the score from Authority, Determination and Motivating. Community-derived FM star formulas
+        /// (e.g. Fitness×9 + (Det+Dis+Mot)×2, Discipline now Authority) give the coaching side about 60%, this trio 40%.
+        public var mental: Double = 0
     }
+
+    /// The trio behind every coach's star rating in FM (Authority replaced Level of Discipline in FM26).
+    public static let coachMental = ["Authority", "Determination", "Motivating"]
 
     public static let areas: [Area] = [
         // Team talks, match analysis and running training: FM's assistant manager duties.
         Area(title: "Assistant manager", keys: ["TacticalKnowledge", "Motivating", "PeopleManagement", "JudgingAbility", "Tactical"],
              group: .assistant),
-        Area(title: "Attacking coaching", keys: ["Attacking"], group: .coaching),
-        Area(title: "Defending coaching", keys: ["Defending"], group: .coaching),
-        Area(title: "Fitness coaching", keys: ["Fitness"], group: .fitness),
-        Area(title: "Goalkeeping coaching", keys: ["Goalkeeping"], group: .goalkeeping),
-        Area(title: "Possession coaching", keys: ["Possession"], group: .coaching),
-        Area(title: "Set pieces", keys: ["SetPieces"], group: .setPieces),
-        Area(title: "Tactical coaching", keys: ["Tactical"], group: .coaching),
-        Area(title: "Technical coaching", keys: ["Technical"], group: .coaching),
-        Area(title: "Youth development", keys: ["WorkingWithYoungsters"], group: .youth),
+        // For clubs with only a few coaches: one coach covering every outfield training area.
+        Area(title: "All-round coach", keys: ["Attacking", "Defending", "Possession", "Tactical", "Technical", "Fitness"],
+             group: .coaching, mental: 0.4),
+        Area(title: "Attacking coaching", keys: ["Attacking"], group: .coaching, mental: 0.4),
+        Area(title: "Defending coaching", keys: ["Defending"], group: .coaching, mental: 0.4),
+        Area(title: "Fitness coaching", keys: ["Fitness"], group: .fitness, mental: 0.4),
+        Area(title: "Goalkeeping coaching", keys: ["Goalkeeping"], group: .goalkeeping, mental: 0.4),
+        Area(title: "Possession coaching", keys: ["Possession"], group: .coaching, mental: 0.4),
+        Area(title: "Set pieces", keys: ["SetPieces"], group: .setPieces, mental: 0.4),
+        Area(title: "Tactical coaching", keys: ["Tactical"], group: .coaching, mental: 0.4),
+        Area(title: "Technical coaching", keys: ["Technical"], group: .coaching, mental: 0.4),
+        Area(title: "Youth development", keys: ["WorkingWithYoungsters"], group: .youth, mental: 0.4),
         Area(title: "Scouting", keys: ["JudgingAbility", "JudgingPotential"], group: .scouting),
         Area(title: "Physio", keys: ["Physiotherapy"], group: .physio),
         Area(title: "Sports science", keys: ["SportsScience"], group: .sportsScience),
@@ -281,6 +290,15 @@ public enum StaffAdvisor {
         public let candidates: [Candidate]
     }
 
+    /// Area score on the 1–20 scale: the area's attributes, blended with the coaching trio where the area has a mental share.
+    static func score(_ r: StaffRow, _ area: Area, _ meta: ExportMeta) -> Double? {
+        guard let base = score(r, area.keys, meta) else { return nil }
+        guard area.mental > 0 else { return base }
+        let present = coachMental.filter { meta.staffAttrKeys.contains($0) }
+        guard !present.isEmpty, let m = score(r, present, meta) else { return base }
+        return base * (1 - area.mental) + m * area.mental
+    }
+
     static func score(_ r: StaffRow, _ keys: [String], _ meta: ExportMeta) -> Double? {
         guard let s = r.person.s else { return nil }
         let vals = keys.compactMap { k -> Double? in
@@ -311,15 +329,19 @@ public enum StaffAdvisor {
         var out: [String: (row: StaffRow, score: Double)] = [:]
         for area in areas {
             // Your current assistant is whoever holds the job, not every coach who could do it.
-            let holders = mine.filter { area.group == .assistant ? $0.job.lowercased().contains("assistant manager") : fits($0.job, area.group) }
-            let scored = holders.compactMap { r in score(r, area.keys, meta).map { (r, $0) } }
+            // The Manager is you, not one of your coaches.
+            let holders = mine.filter {
+                area.group == .assistant ? $0.job.lowercased().contains("assistant manager")
+                    : $0.job.lowercased() != "manager" && fits($0.job, area.group)
+            }
+            let scored = holders.compactMap { r in score(r, area, meta).map { (r, $0) } }
             if let b = scored.max(by: { $0.1 < $1.1 }) { out[area.title] = (b.0, b.1) }
         }
         return out
     }
 
     /// Area score for one person (average of the area's attributes), nil if the scan lacks them.
-    public static func areaScore(_ r: StaffRow, area: Area, meta: ExportMeta) -> Double? { score(r, area.keys, meta) }
+    public static func areaScore(_ r: StaffRow, area: Area, meta: ExportMeta) -> Double? { score(r, area, meta) }
 
     /// Can this person be hired to do the area's work? Their job fits, or they're a free agent (not a board member).
     public static func canDo(_ r: StaffRow, _ area: Area) -> Bool {
@@ -340,12 +362,12 @@ public enum StaffAdvisor {
         }
         let advice: [Advice] = areas.compactMap { area in
             guard area.keys.allSatisfy({ meta.staffAttrKeys.contains($0) }) else { return nil }
-            let scored = mine.filter { fits($0.job, area.group) }.compactMap { r in score(r, area.keys, meta).map { (r, $0) } }
+            let scored = mine.filter { fits($0.job, area.group) }.compactMap { r in score(r, area, meta).map { (r, $0) } }
             let best = scored.max { $0.1 < $1.1 }
             let floor = (best?.1 ?? 0) + 2
             var cands: [Candidate] = []
             for r in others where fits(r.job, area.group) || (r.club.isEmpty && !isBoard(r.job)) {
-                guard let sc = score(r, area.keys, meta), sc >= floor else { continue }
+                guard let sc = score(r, area, meta), sc >= floor else { continue }
                 if maxWageGbp > 0, let w = r.person.wage, w > maxWageGbp { continue }
                 let d = doubt(r, clubRep: clubRep)
                 if realistic && d != nil { continue }

@@ -12,7 +12,7 @@ struct StaffView: View {
         @Bindable var store = store
         let keys = store.meta?.staffAttrKeys ?? AttributeGroups.staffCoaching
         let f = store.staffFilter
-        let searchActive = !f.text.isEmpty || !f.job.isEmpty || !f.nation.isEmpty || f.freeAgentsOnly
+        let searchActive = !f.text.isEmpty || !f.job.isEmpty || !f.nation.isEmpty || f.freeAgentsOnly || !f.excludedJobs.isEmpty
         let activeCount = [searchActive, !f.area.isEmpty, f.minAge != 15 || f.maxAge != 90 || f.minCA > 0, !f.rules.isEmpty]
             .filter { $0 }.count
         let areaOn = !f.area.isEmpty
@@ -77,11 +77,13 @@ struct StaffView: View {
         let bests = store.staffBests
         return ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                FilterGroup(title: "Search", active: !f.text.isEmpty || !f.job.isEmpty || !f.nation.isEmpty || f.freeAgentsOnly) {
+                FilterGroup(title: "Search", active: !f.text.isEmpty || !f.job.isEmpty || !f.nation.isEmpty || f.freeAgentsOnly
+                                                     || !f.excludedJobs.isEmpty) {
                     TextField("Name or club", text: $store.staffFilter.text)
                     TextField("Job (Coach, Scout, Physio…)", text: $store.staffFilter.job)
                     TextField("Country", text: $store.staffFilter.nation)
                     Toggle("Free agents only", isOn: $store.staffFilter.freeAgentsOnly)
+                    ExcludeJobsButton()
                 }
                 .textFieldStyle(.roundedBorder)
                 FilterGroup(title: "For my club", active: !f.area.isEmpty) {
@@ -195,6 +197,78 @@ struct StaffView: View {
             store.copyStaffName(selection)
             return []
         }
+    }
+}
+
+/// "Exclude jobs": a checklist of every job title in the scan, with shortcuts for the usual suspects.
+struct ExcludeJobsButton: View {
+    @Environment(Store.self) private var store
+    @State private var open = false
+    @State private var search = ""
+
+    var body: some View {
+        let n = store.staffFilter.excludedJobs.count
+        Button { open.toggle() } label: {
+            HStack {
+                Image(systemName: "minus.circle")
+                Text(n == 0 ? "Exclude jobs…" : "Excluding \(n) job\(n == 1 ? "" : "s")")
+                Spacer()
+            }
+        }
+        .buttonStyle(.bordered)
+        .tint(n > 0 ? Theme.accent : nil)
+        .help(n == 0 ? "Leave out people by job, e.g. other clubs' managers"
+                     : store.staffFilter.excludedJobs.sorted().joined(separator: ", "))
+        .popover(isPresented: $open, arrowEdge: .trailing) { list }
+    }
+
+    private var list: some View {
+        let jobs = store.staffJobTitles
+        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+        let shown = q.isEmpty ? jobs : jobs.filter { $0.title.lowercased().contains(q) }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Leave out these jobs").font(.headline)
+            HStack(spacing: 6) {
+                Button("Managers & assistants") { add { $0.contains("manager") } }
+                Button("Board & directors") { add { StaffAdvisor.isBoard($0) } }
+                Button("Clear") { store.staffFilter.excludedJobs = [] }
+            }
+            .controlSize(.small)
+            TextField("Find a job title", text: $search).textFieldStyle(.roundedBorder)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(shown) { j in
+                        Toggle(isOn: binding(j.title)) {
+                            HStack {
+                                Text(j.title)
+                                Spacer()
+                                Text(j.count.formatted()).foregroundStyle(.secondary).monospacedDigit()
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+                .padding(.trailing, 6)
+            }
+            .frame(height: 340)
+        }
+        .padding(14)
+        .frame(width: 320)
+    }
+
+    private func binding(_ title: String) -> Binding<Bool> {
+        Binding(get: { store.staffFilter.excludedJobs.contains(title) },
+                set: { on in
+                    var s = Set(store.staffFilter.excludedJobs)
+                    if on { s.insert(title) } else { s.remove(title) }
+                    store.staffFilter.excludedJobs = s.sorted()
+                })
+    }
+
+    private func add(_ match: (String) -> Bool) {
+        var s = Set(store.staffFilter.excludedJobs)
+        for j in store.staffJobTitles where match(j.title.lowercased()) { s.insert(j.title) }
+        store.staffFilter.excludedJobs = s.sorted()
     }
 }
 

@@ -220,6 +220,9 @@ final class InsightTests: XCTestCase {
         XCTAssertTrue(Filtering.apply(f, to: staff, meta: meta, club: ctx).contains { $0.name == "Slight Upgrade" })
         var g = StaffFilter(); g.nation = "spa"
         XCTAssertEqual(Filtering.apply(g, to: staff, meta: meta).map(\.name), ["Spanish Coach"])
+        g = StaffFilter(); g.excludedJobs = ["Coach"]
+        XCTAssertEqual(Set(Filtering.apply(g, to: staff, meta: meta).map(\.name)), ["Famous Free", "Local Free"],
+                       "excluding a job title leaves out everyone who holds it")
         g = StaffFilter(); g.freeAgentsOnly = true
         XCTAssertEqual(Set(Filtering.apply(g, to: staff, meta: meta).map(\.name)), ["Famous Free", "Local Free"])
     }

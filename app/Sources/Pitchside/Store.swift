@@ -427,6 +427,19 @@ final class Store {
         clubTeams.first { $0.rank == 0 }?.reputation ?? squadReport?.squad.compactMap(\.person.trep).max()
     }
 
+    struct JobCount: Identifiable { let title: String; let count: Int; var id: String { title } }
+    @ObservationIgnored private var jobsCache: (key: Int, jobs: [JobCount])?
+
+    /// Every job title in the scan with how many people hold it, most common first (for Exclude jobs).
+    var staffJobTitles: [JobCount] {
+        if let c = jobsCache, c.key == allStaff.count { return c.jobs }
+        var counts: [String: Int] = [:]
+        for r in allStaff where !r.job.isEmpty { counts[r.job, default: 0] += 1 }
+        let jobs = counts.map { JobCount(title: $0.key, count: $0.value) }.sorted { $0.count > $1.count || ($0.count == $1.count && $0.title < $1.title) }
+        jobsCache = (allStaff.count, jobs)
+        return jobs
+    }
+
     @ObservationIgnored private var bestsCache: (key: String, bests: [String: (row: StaffRow, score: Double)])?
 
     /// Your best person per staff area (cached per club and scan).

@@ -222,9 +222,11 @@ public struct StaffFilter: Codable, Sendable, Equatable {
     public var upgradesOnly = true
     /// Only people who'd plausibly join your club.
     public var likelyOnly = true
+    /// Job titles to leave out, exactly as the scan has them (e.g. "Manager", "Assistant Manager").
+    public var excludedJobs: [String] = []
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case text, job, minAge, maxAge, minCA, gender, rules, nation, freeAgentsOnly, area, upgradesOnly, likelyOnly }
+    enum CodingKeys: String, CodingKey { case text, job, minAge, maxAge, minCA, gender, rules, nation, freeAgentsOnly, area, upgradesOnly, likelyOnly, excludedJobs }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
@@ -239,6 +241,7 @@ public struct StaffFilter: Codable, Sendable, Equatable {
         area = try c.decodeIfPresent(String.self, forKey: .area) ?? ""
         upgradesOnly = try c.decodeIfPresent(Bool.self, forKey: .upgradesOnly) ?? true
         likelyOnly = try c.decodeIfPresent(Bool.self, forKey: .likelyOnly) ?? true
+        excludedJobs = try c.decodeIfPresent([String].self, forKey: .excludedJobs) ?? []
     }
 }
 
@@ -319,6 +322,7 @@ public enum Filtering {
         let nation = f.nation.trimmingCharacters(in: .whitespaces).lowercased()
         let idx = Dictionary(uniqueKeysWithValues: meta.staffAttrKeys.enumerated().map { ($1, $0) })
         let area = f.area.isEmpty ? nil : StaffAdvisor.areas.first { $0.title == f.area }
+        let excluded = Set(f.excludedJobs)
         let floor = area.flatMap { a in club?.bests[a.title] }.map { $0 + 2 } ?? 0
         return rows.compactMap { r0 in
             var r = r0
@@ -327,6 +331,7 @@ public enum Filtering {
             if f.gender == 1 && p.f == 1 { return nil }
             if f.gender == 2 && p.f != 1 { return nil }
             if f.freeAgentsOnly && !r.club.isEmpty { return nil }
+            if !excluded.isEmpty && excluded.contains(r.job) { return nil }
             if !text.isEmpty && !(p.n + " " + (p.club ?? "")).lowercased().contains(text) { return nil }
             if !job.isEmpty && !r.job.lowercased().contains(job) { return nil }
             if !nation.isEmpty && !(p.nat ?? "").lowercased().contains(nation) { return nil }

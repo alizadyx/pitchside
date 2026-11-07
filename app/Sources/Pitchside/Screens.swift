@@ -1295,7 +1295,7 @@ struct NationalityPresetMenu: View {
                 Button(p.title) { text = p.nations.joined(separator: ", ") }
                     .help(p.help)
             }
-            if let c = store.myCountry {
+            if let c = store.squadNationality {
                 Button("My country only (\(c))") { text = c }
             }
             Divider()

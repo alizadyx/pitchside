@@ -314,8 +314,8 @@ final class Store {
     var clubs: [String] = []
     var nations: [String] = []
 
-    /// The country of your club, taken as the most common nationality in your squad.
-    var myCountry: String? {
+    /// Your squad's most common nationality, spelled as the scan spells it (for "My country only").
+    var squadNationality: String? {
         guard let squad = squadReport?.squad, !squad.isEmpty else { return nil }
         var counts: [String: Int] = [:]
         for r in squad { if let n = r.person.nat, !n.isEmpty { counts[n, default: 0] += 1 } }

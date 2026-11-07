@@ -310,10 +310,46 @@ public struct SigningCriteria: Sendable, Equatable {
         text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
+    /// Every nationality in the scan, lowercased. A name that is one of these matches exactly
+    /// ("Ireland" is the Republic, not "N.Ireland"); anything else matches loosely ("irel" finds both).
+    public var knownNations: Set<String> = []
+
     func nationalityMatches(_ nat: String?) -> Bool {
         guard !nationalities.isEmpty else { return true }
         guard let nat, !nat.isEmpty else { return false }
-        return nationalities.contains { nat.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        return nationalities.contains { t in
+            if knownNations.contains(t.lowercased()) {
+                return nat.compare(t, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            }
+            return nat.range(of: t, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+    }
+
+    /// Ready-made nationality lists for work permits, spelled as FM27 spells them.
+    public enum NationalityPreset: String, CaseIterable, Identifiable, Sendable {
+        case britishIrish, euEEA
+        public var id: String { rawValue }
+        public var title: String {
+            switch self {
+            case .britishIrish: "UK & Ireland: no work permit"
+            case .euEEA: "EU/EEA + Switzerland"
+            }
+        }
+        public var help: String {
+            switch self {
+            case .britishIrish: "For clubs in England, Scotland, Wales or Northern Ireland: British and Irish players need no work permit"
+            case .euEEA: "For clubs in an EU country: EU, EEA and Swiss players count as home players, not foreigners"
+            }
+        }
+        public var nations: [String] {
+            switch self {
+            case .britishIrish: ["England", "Scotland", "Wales", "N.Ireland", "Ireland"]
+            case .euEEA: ["Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark", "Estonia", "Finland",
+                          "France", "Germany", "Greece", "Hungary", "Ireland", "Italy", "Latvia", "Lithuania", "Luxembourg",
+                          "Malta", "Netherlands", "Poland", "Portugal", "Romania", "Slovakia", "Slovenia", "Spain", "Sweden",
+                          "Iceland", "Liechtenstein", "Norway", "Switzerland"]
+            }
+        }
     }
 }
 

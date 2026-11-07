@@ -29,3 +29,18 @@ final class UIHelpersTests: XCTestCase {
         XCTAssertFalse(a.sameSearch(as: b))
     }
 }
+
+final class NationalityTests: XCTestCase {
+    func testExactWhenKnownLooseOtherwise() {
+        var c = SigningCriteria()
+        c.knownNations = ["ireland", "n.ireland", "england"]
+        c.nationalities = ["Ireland"]
+        XCTAssertTrue(c.nationalityMatches("Ireland"))
+        XCTAssertFalse(c.nationalityMatches("N.Ireland"), "a real country name matches exactly")
+        c.nationalities = ["irel"]
+        XCTAssertTrue(c.nationalityMatches("N.Ireland"))
+        c.nationalities = SigningCriteria.NationalityPreset.britishIrish.nations
+        XCTAssertTrue(["England", "N.Ireland", "Ireland"].allSatisfy { c.nationalityMatches($0) })
+        XCTAssertFalse(c.nationalityMatches("France"))
+    }
+}

@@ -176,6 +176,7 @@ final class Store {
         c.minInterest = minInterest > 0 ? InterestLevel(rawValue: minInterest) : nil
         c.forDepth = signForDepth
         c.nationalities = SigningCriteria.nationalities(from: signNationality)
+        c.knownNations = Set(nations.map { $0.lowercased() })
         return c
     }
     var squadReport: SquadReport?
@@ -312,6 +313,14 @@ final class Store {
     }
     var clubs: [String] = []
     var nations: [String] = []
+
+    /// The country of your club, taken as the most common nationality in your squad.
+    var myCountry: String? {
+        guard let squad = squadReport?.squad, !squad.isEmpty else { return nil }
+        var counts: [String: Int] = [:]
+        for r in squad { if let n = r.person.nat, !n.isEmpty { counts[n, default: 0] += 1 } }
+        return counts.max { $0.value < $1.value }?.key
+    }
     var divisions: [String] = []
     var seasonOverride: Int = UserDefaults.standard.integer(forKey: "seasonOverride") {
         didSet { UserDefaults.standard.set(seasonOverride, forKey: "seasonOverride"); rebuildRows() }

@@ -198,6 +198,7 @@ struct SquadView: View {
                         SuggestionField(placeholder: "Any", text: $store.signNationality, options: store.nations)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 170)
+                        NationalityPresetMenu(text: $store.signNationality)
                     }
                     .help("Only suggest players of this nationality. Several: separate with commas (England, Wales).")
                 }
@@ -1280,5 +1281,30 @@ struct TargetGapCard: View {
             Text(value).font(.callout.bold()).monospacedDigit().foregroundStyle(color)
         }
         .help(help)
+    }
+}
+
+/// Quick nationality lists for work permits; fills the field, which you can still edit.
+struct NationalityPresetMenu: View {
+    @Binding var text: String
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        Menu {
+            ForEach(SigningCriteria.NationalityPreset.allCases) { p in
+                Button(p.title) { text = p.nations.joined(separator: ", ") }
+                    .help(p.help)
+            }
+            if let c = store.myCountry {
+                Button("My country only (\(c))") { text = c }
+            }
+            Divider()
+            Button("Any nationality") { text = "" }
+        } label: {
+            Image(systemName: "globe")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Work permit presets: UK & Ireland, EU/EEA + Switzerland, or your country only")
     }
 }
